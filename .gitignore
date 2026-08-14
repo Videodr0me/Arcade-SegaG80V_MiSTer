@@ -1,0 +1,49 @@
+# Quartus build output
+/db/
+/incremental_db/
+/output_files/
+/hc_output/
+*.qws
+*.flock
+*.rpt
+*.smsg
+*.summary
+*.done
+*.jdi
+*.pin
+*.sof
+*.ddb
+/build_id.v
+
+# Verilator build output
+sim/obj_*/
+sim/**/obj_*/
+sim/**/tmp_*/
+sim/**/work/
+sim/**/modelsim.ini
+sim/**/transcript
+sim/**/vsim.wlf
+sim/**/__pycache__/
+sim/**/*.pyc
+sim/tmp/
+
+# Local TimeQuest reports
+tcl/*.txt
+
+# OS metadata
+.DS_Store
+
+# ROM-derived data - never commit
+sim/roms/
+sim/vramdumps/
+
+# Audio capture output - ROM-derived and large
+sim/audio/output/
+
+# Local simulation, captures, and engineering notes
+/Research/
+/sim/
+/snap/
+/docs/
+/tcl/
+/cfg/
