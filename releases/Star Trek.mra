@@ -2,7 +2,7 @@
     <about author="alanswx" webpage="https://github.com/alanswx/Arcade-SegaG80V_MiSTer"/>
     <name>Star Trek</name>
     <setname>startrek</setname>
-    <rbf>Arcade-SegaG80V</rbf>
+    <rbf>SegaG80V</rbf>
     <mameversion>0283</mameversion>
     <year>1982</year>
     <manufacturer>Sega</manufacturer>
