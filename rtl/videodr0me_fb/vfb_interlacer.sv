@@ -110,6 +110,7 @@ module vfb_interlacer
 		current_vblank = (field_phase < active_start) ||
 		                 (field_phase >= active_end);
 		current_hsync = !((output_x >= HS_START) && (output_x < HS_END));
+		// Alternate fields naturally begin on opposite half-line phases.
 		current_vsync = !((field_phase >= HS_START) &&
 		                  (field_phase < VS_END));
 

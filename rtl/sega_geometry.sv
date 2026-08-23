@@ -3,14 +3,15 @@
 //
 //  Written 2026 by Videodr0me
 //
-//  The presentation DDA doubles the authentic coordinate grid while retaining
-//  every endpoint. Normal presentation uses the hardware source window:
+//  The presentation DDA doubles the original source window:
 //
-//      x  0..2046            doubled full width
-//      y  192..1854          doubled 96..927 crop
+//                 original source         doubled source
+//      x           0 <= x < 1024           0 <= src_x <= 2048
+//      y          96 <= y <  928         192 <= src_y <= 1856
 //
-//  Open Matte can retain either source axis outside that window until raster
-//  clipping.
+//  The shadow DDA can emit the doubled exclusive edge as a segment endpoint,
+//  so Closed Matte retains it. Open Matte can retain either source axis beyond
+//  this window until raster clipping.
 //
 //  Orientation uses the three per-game configuration flags:
 //
@@ -48,29 +49,36 @@ module sega_geometry (
 	output wire [10:0] raster_y,
 	output wire        in_bounds
 );
-	localparam logic signed [12:0] FULL_MAX = 13'sd2046;
-	localparam logic signed [12:0] CROP_MAX = 13'sd1662;
-	localparam logic signed [12:0] FULL_CTR = 13'sd1022;
-	localparam logic signed [12:0] CROP_CTR = 13'sd830;
+	// Inclusive Closed Matte bounds in the doubled source coordinate space.
+	localparam logic signed [12:0] SOURCE_X_MAX   = 13'sd2048;
+	localparam logic signed [12:0] SOURCE_Y_START = 13'sd192;
+	localparam logic signed [12:0] SOURCE_Y_MAX   = 13'sd1864;
+
+	// Even authentic endpoints and centres used by reflection and scaling.
+	localparam logic signed [12:0] FIELD_X_MAX = 13'sd2046;
+	localparam logic signed [12:0] FIELD_Y_MAX = 13'sd1662;
+	localparam logic signed [12:0] FIELD_X_CTR = 13'sd1022;
+	localparam logic signed [12:0] FIELD_Y_CTR = 13'sd830;
 
 	wire game_flip_x = game_orientation[0];
 	wire game_flip_y = game_orientation[1];
 	wire game_swap   = game_orientation[2];
 
-	// Apply the normal source crop; Open Matte can expose either axis.
+	// Apply the source window before game orientation and user rotation.
 	wire signed [12:0] sx = src_x;
-	wire signed [12:0] sy = src_y - 13'sd192;
-	wire source_x_visible = (sx >= 13'sd0) && (sx <= FULL_MAX);
-	wire source_y_visible = (sy >= 13'sd0) && (sy <= CROP_MAX);
+	wire signed [12:0] sy = src_y - SOURCE_Y_START;
+	wire source_x_visible = (src_x >= 13'sd0) && (src_x <= SOURCE_X_MAX);
+	wire source_y_visible = (src_y >= SOURCE_Y_START) &&
+	                        (src_y <= SOURCE_Y_MAX);
 
 	// First apply the orientation required by the game, then rotate the
 	// resulting upright picture for the user's display.
 	wire signed [12:0] game_x_raw = game_swap ? sy : sx;
 	wire signed [12:0] game_y_raw = game_swap ? sx : sy;
-	wire signed [12:0] game_x_max = game_swap ? CROP_MAX : FULL_MAX;
-	wire signed [12:0] game_y_max = game_swap ? FULL_MAX : CROP_MAX;
-	wire signed [12:0] game_x_ctr = game_swap ? CROP_CTR : FULL_CTR;
-	wire signed [12:0] game_y_ctr = game_swap ? FULL_CTR : CROP_CTR;
+	wire signed [12:0] game_x_max = game_swap ? FIELD_Y_MAX : FIELD_X_MAX;
+	wire signed [12:0] game_y_max = game_swap ? FIELD_X_MAX : FIELD_Y_MAX;
+	wire signed [12:0] game_x_ctr = game_swap ? FIELD_Y_CTR : FIELD_X_CTR;
+	wire signed [12:0] game_y_ctr = game_swap ? FIELD_X_CTR : FIELD_Y_CTR;
 	wire signed [12:0] game_x = game_flip_x ?
 	                         (game_x_max - game_x_raw) : game_x_raw;
 	wire signed [12:0] game_y = game_flip_y ?

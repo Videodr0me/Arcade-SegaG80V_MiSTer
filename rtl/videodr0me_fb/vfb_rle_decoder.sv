@@ -66,7 +66,8 @@ module vfb_rle_decoder (
 		end
 	end
 
-	assign token_ready = !fifo_full || fifo_pop;
+	// Hold the source token while full; intake resumes after a run frees a slot.
+	assign token_ready = !fifo_full;
 	wire fifo_push = token_valid && token_ready && token_supported;
 
 	always_comb begin

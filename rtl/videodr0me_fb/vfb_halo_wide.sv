@@ -38,6 +38,8 @@ module vfb_halo_wide #(
 	localparam integer ENERGY_W = 13;
 	localparam integer ENERGY_RGB_W = 3 * ENERGY_W;
 	localparam integer ENERGY_HISTORY_W = 7 * ENERGY_RGB_W;
+	localparam integer ENERGY_PAIR_W = ENERGY_W + 1;
+	localparam integer ENERGY_PAIR_RGB_W = 3 * ENERGY_PAIR_W;
 	localparam integer SPREAD_SUM_W = 20;
 	localparam [3:0] RECON_SAMPLE_X_ADVANCE = 4'd5;
 	localparam [3:0] RECON_SAMPLE_Y_ADVANCE = 4'd7;
@@ -329,7 +331,7 @@ module vfb_halo_wide #(
 	logic [7:0] tail_service_height;
 	logic tail_service_epoch;
 	logic [2:0] tail_service_gap;
-	logic [7:0] tail_service_first_live_y_q;
+	logic [7:0] tail_service_safe_limit_y_q;
 	wire [11:0] tail_service_frame_reconstruction_line =
 		previous_frame_total_lines - RECON_DELAY;
 	wire [11:0] tail_service_line_reconstruction_line =
@@ -354,8 +356,7 @@ module vfb_halo_wide #(
 	end
 
 	wire tail_service_row_safe =
-		(tail_service_y < 8'd3) ||
-		((tail_service_y - 8'd3) < tail_service_first_live_y_q);
+		tail_service_y < tail_service_safe_limit_y_q;
 	wire tail_service_valid =
 		tail_service_active && (tail_service_gap == 3'd0) &&
 		tail_service_row_safe;
@@ -474,7 +475,7 @@ module vfb_halo_wide #(
 			tail_service_height <= 8'd0;
 			tail_service_epoch <= 1'b0;
 			tail_service_gap <= 3'd0;
-			tail_service_first_live_y_q <= 8'd0;
+			tail_service_safe_limit_y_q <= 8'd3;
 		end else begin
 			low_total_valid <= 1'b0;
 			low_reduce_valid <= low_total_valid;
@@ -569,8 +570,8 @@ module vfb_halo_wide #(
 
 				tail_limit_y =
 					reduced_height + VERTICAL_CENTER_DELAY_ROWS + 8'd1;
-				tail_service_first_live_y_q <=
-					tail_service_frame_first_live_y_q;
+				tail_service_safe_limit_y_q <=
+					tail_service_frame_first_live_y_q + 8'd3;
 				source_epoch <= next_source_epoch;
 				reduce_y <= 8'd0;
 				zero_fill_active <= 1'b0;
@@ -587,8 +588,8 @@ module vfb_halo_wide #(
 					(completed_rows[source_epoch] <
 					 tail_limit_y);
 			end else if (line_start) begin
-				tail_service_first_live_y_q <=
-					tail_service_line_first_live_y_q;
+				tail_service_safe_limit_y_q <=
+					tail_service_line_first_live_y_q + 8'd3;
 			end
 
 			if (source_frame_active_start)
@@ -688,16 +689,41 @@ module vfb_halo_wide #(
 	end
 
 	// Eight-tap filtering at reduced resolution.
-	function automatic [SPREAD_SUM_W-1:0] spread8_edge(
+	function automatic [ENERGY_PAIR_W-1:0] pair_energy(
 		input logic [ENERGY_W-1:0] left,
-		input logic [ENERGY_W-1:0] right,
+		input logic [ENERGY_W-1:0] right
+	);
+		begin
+			pair_energy = {1'b0, left} + {1'b0, right};
+		end
+	endfunction
+
+	function automatic [ENERGY_PAIR_RGB_W-1:0] pair_rgb(
+		input logic [ENERGY_RGB_W-1:0] left,
+		input logic [ENERGY_RGB_W-1:0] right
+	);
+		begin
+			pair_rgb = {
+				pair_energy(
+					left[3*ENERGY_W-1:2*ENERGY_W],
+					right[3*ENERGY_W-1:2*ENERGY_W]),
+				pair_energy(
+					left[2*ENERGY_W-1:ENERGY_W],
+					right[2*ENERGY_W-1:ENERGY_W]),
+				pair_energy(
+					left[ENERGY_W-1:0],
+					right[ENERGY_W-1:0])
+			};
+		end
+	endfunction
+
+	function automatic [SPREAD_SUM_W-1:0] spread8_edge(
+		input logic [ENERGY_PAIR_W-1:0] pair,
 		input logic [1:0] spread_mode
 	);
-		logic [ENERGY_W:0] pair;
 		logic [SPREAD_SUM_W-1:0] pair_ext;
 		begin
-			pair = {1'b0, left} + {1'b0, right};
-			pair_ext = {{(SPREAD_SUM_W-ENERGY_W-1){1'b0}}, pair};
+			pair_ext = {{(SPREAD_SUM_W-ENERGY_PAIR_W){1'b0}}, pair};
 			case (spread_mode)
 				2'd0: spread8_edge = pair_ext;
 				2'd1: spread8_edge = pair_ext << 2;
@@ -708,15 +734,12 @@ module vfb_halo_wide #(
 	endfunction
 
 	function automatic [SPREAD_SUM_W-1:0] spread8_near(
-		input logic [ENERGY_W-1:0] left,
-		input logic [ENERGY_W-1:0] right,
+		input logic [ENERGY_PAIR_W-1:0] pair,
 		input logic [1:0] spread_mode
 	);
-		logic [ENERGY_W:0] pair;
 		logic [SPREAD_SUM_W-1:0] pair_ext;
 		begin
-			pair = {1'b0, left} + {1'b0, right};
-			pair_ext = {{(SPREAD_SUM_W-ENERGY_W-1){1'b0}}, pair};
+			pair_ext = {{(SPREAD_SUM_W-ENERGY_PAIR_W){1'b0}}, pair};
 			case (spread_mode)
 				2'd0:
 					spread8_near = (pair_ext << 3) - pair_ext;
@@ -729,15 +752,12 @@ module vfb_halo_wide #(
 	endfunction
 
 	function automatic [SPREAD_SUM_W-1:0] spread8_mid(
-		input logic [ENERGY_W-1:0] left,
-		input logic [ENERGY_W-1:0] right,
+		input logic [ENERGY_PAIR_W-1:0] pair,
 		input logic [1:0] spread_mode
 	);
-		logic [ENERGY_W:0] pair;
 		logic [SPREAD_SUM_W-1:0] pair_ext;
 		begin
-			pair = {1'b0, left} + {1'b0, right};
-			pair_ext = {{(SPREAD_SUM_W-ENERGY_W-1){1'b0}}, pair};
+			pair_ext = {{(SPREAD_SUM_W-ENERGY_PAIR_W){1'b0}}, pair};
 			case (spread_mode)
 				2'd0:
 					spread8_mid =
@@ -756,15 +776,12 @@ module vfb_halo_wide #(
 	endfunction
 
 	function automatic [SPREAD_SUM_W-1:0] spread8_center(
-		input logic [ENERGY_W-1:0] left,
-		input logic [ENERGY_W-1:0] right,
+		input logic [ENERGY_PAIR_W-1:0] pair,
 		input logic [1:0] spread_mode
 	);
-		logic [ENERGY_W:0] pair;
 		logic [SPREAD_SUM_W-1:0] pair_ext;
 		begin
-			pair = {1'b0, left} + {1'b0, right};
-			pair_ext = {{(SPREAD_SUM_W-ENERGY_W-1){1'b0}}, pair};
+			pair_ext = {{(SPREAD_SUM_W-ENERGY_PAIR_W){1'b0}}, pair};
 			case (spread_mode)
 				2'd0:
 					spread8_center =
@@ -885,6 +902,14 @@ module vfb_halo_wide #(
 	logic [ENERGY_RGB_W-1:0] vertical_tap_5;
 	logic [ENERGY_RGB_W-1:0] vertical_tap_6;
 	logic [ENERGY_RGB_W-1:0] vertical_tap_7;
+	wire [ENERGY_PAIR_RGB_W-1:0] vertical_pair_edge =
+		pair_rgb(vertical_tap_0, vertical_tap_7);
+	wire [ENERGY_PAIR_RGB_W-1:0] vertical_pair_near =
+		pair_rgb(vertical_tap_1, vertical_tap_6);
+	wire [ENERGY_PAIR_RGB_W-1:0] vertical_pair_mid =
+		pair_rgb(vertical_tap_2, vertical_tap_5);
+	wire [ENERGY_PAIR_RGB_W-1:0] vertical_pair_center =
+		pair_rgb(vertical_tap_3, vertical_tap_4);
 	logic vertical_part_valid;
 	logic vertical_part_safe;
 	logic [COARSE_W-1:0] vertical_part_x;
@@ -1049,63 +1074,59 @@ module vfb_halo_wide #(
 			vertical_part_epoch <= vertical_mask_epoch;
 			vertical_part_edge_r <=
 				spread8_edge(
-					vertical_tap_0[3*ENERGY_W-1:2*ENERGY_W],
-					vertical_tap_7[3*ENERGY_W-1:2*ENERGY_W],
+					vertical_pair_edge[
+						3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_near_r <=
 				spread8_near(
-					vertical_tap_1[3*ENERGY_W-1:2*ENERGY_W],
-					vertical_tap_6[3*ENERGY_W-1:2*ENERGY_W],
+					vertical_pair_near[
+						3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_mid_r <=
 				spread8_mid(
-					vertical_tap_2[3*ENERGY_W-1:2*ENERGY_W],
-					vertical_tap_5[3*ENERGY_W-1:2*ENERGY_W],
+					vertical_pair_mid[
+						3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_center_r <=
 				spread8_center(
-					vertical_tap_3[3*ENERGY_W-1:2*ENERGY_W],
-					vertical_tap_4[3*ENERGY_W-1:2*ENERGY_W],
+					vertical_pair_center[
+						3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_edge_g <=
 				spread8_edge(
-					vertical_tap_0[2*ENERGY_W-1:ENERGY_W],
-					vertical_tap_7[2*ENERGY_W-1:ENERGY_W],
+					vertical_pair_edge[
+						2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_near_g <=
 				spread8_near(
-					vertical_tap_1[2*ENERGY_W-1:ENERGY_W],
-					vertical_tap_6[2*ENERGY_W-1:ENERGY_W],
+					vertical_pair_near[
+						2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_mid_g <=
 				spread8_mid(
-					vertical_tap_2[2*ENERGY_W-1:ENERGY_W],
-					vertical_tap_5[2*ENERGY_W-1:ENERGY_W],
+					vertical_pair_mid[
+						2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_center_g <=
 				spread8_center(
-					vertical_tap_3[2*ENERGY_W-1:ENERGY_W],
-					vertical_tap_4[2*ENERGY_W-1:ENERGY_W],
+					vertical_pair_center[
+						2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
 					halo_spread_mode_q);
 			vertical_part_edge_b <=
 				spread8_edge(
-					vertical_tap_0[ENERGY_W-1:0],
-					vertical_tap_7[ENERGY_W-1:0],
+					vertical_pair_edge[ENERGY_PAIR_W-1:0],
 					halo_spread_mode_q);
 			vertical_part_near_b <=
 				spread8_near(
-					vertical_tap_1[ENERGY_W-1:0],
-					vertical_tap_6[ENERGY_W-1:0],
+					vertical_pair_near[ENERGY_PAIR_W-1:0],
 					halo_spread_mode_q);
 			vertical_part_mid_b <=
 				spread8_mid(
-					vertical_tap_2[ENERGY_W-1:0],
-					vertical_tap_5[ENERGY_W-1:0],
+					vertical_pair_mid[ENERGY_PAIR_W-1:0],
 					halo_spread_mode_q);
 			vertical_part_center_b <=
 				spread8_center(
-					vertical_tap_3[ENERGY_W-1:0],
-					vertical_tap_4[ENERGY_W-1:0],
+					vertical_pair_center[ENERGY_PAIR_W-1:0],
 					halo_spread_mode_q);
 
 			vertical_sum_safe <= vertical_part_safe;
@@ -1162,14 +1183,11 @@ module vfb_halo_wide #(
 	logic [1:0] horizontal_mask_bank;
 	logic horizontal_mask_epoch;
 	logic [7:0] horizontal_mask_y;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_0;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_1;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_2;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_3;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_4;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_5;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_6;
-	logic [ENERGY_RGB_W-1:0] horizontal_mask_tap_7;
+	logic [1:0] horizontal_mask_spread_mode;
+	logic [ENERGY_PAIR_RGB_W-1:0] horizontal_mask_pair_edge;
+	logic [ENERGY_PAIR_RGB_W-1:0] horizontal_mask_pair_near;
+	logic [ENERGY_PAIR_RGB_W-1:0] horizontal_mask_pair_mid;
+	logic [ENERGY_PAIR_RGB_W-1:0] horizontal_mask_pair_center;
 	logic horizontal_candidate_valid;
 	logic horizontal_candidate_row_complete;
 	logic [COARSE_W-1:0] horizontal_candidate_x;
@@ -1399,14 +1417,11 @@ module vfb_halo_wide #(
 			horizontal_mask_bank <= 2'd0;
 			horizontal_mask_epoch <= 1'b0;
 			horizontal_mask_y <= 8'd0;
-			horizontal_mask_tap_0 <= '0;
-			horizontal_mask_tap_1 <= '0;
-			horizontal_mask_tap_2 <= '0;
-			horizontal_mask_tap_3 <= '0;
-			horizontal_mask_tap_4 <= '0;
-			horizontal_mask_tap_5 <= '0;
-			horizontal_mask_tap_6 <= '0;
-			horizontal_mask_tap_7 <= '0;
+			horizontal_mask_spread_mode <= 2'd0;
+			horizontal_mask_pair_edge <= '0;
+			horizontal_mask_pair_near <= '0;
+			horizontal_mask_pair_mid <= '0;
+			horizontal_mask_pair_center <= '0;
 			horizontal_part_valid <= 1'b0;
 			horizontal_part_row_complete <= 1'b0;
 			horizontal_part_x <= '0;
@@ -1454,14 +1469,19 @@ module vfb_halo_wide #(
 			horizontal_mask_bank <= horizontal_candidate_bank;
 			horizontal_mask_epoch <= horizontal_candidate_epoch;
 			horizontal_mask_y <= horizontal_candidate_y;
-			horizontal_mask_tap_0 <= horizontal_candidate_tap_0;
-			horizontal_mask_tap_1 <= horizontal_candidate_tap_1;
-			horizontal_mask_tap_2 <= horizontal_candidate_tap_2;
-			horizontal_mask_tap_3 <= horizontal_candidate_tap_3;
-			horizontal_mask_tap_4 <= horizontal_candidate_tap_4;
-			horizontal_mask_tap_5 <= horizontal_candidate_tap_5;
-			horizontal_mask_tap_6 <= horizontal_candidate_tap_6;
-			horizontal_mask_tap_7 <= horizontal_candidate_tap_7;
+			horizontal_mask_spread_mode <= halo_spread_mode_q;
+			horizontal_mask_pair_edge <= pair_rgb(
+				horizontal_candidate_tap_0,
+				horizontal_candidate_tap_7);
+			horizontal_mask_pair_near <= pair_rgb(
+				horizontal_candidate_tap_1,
+				horizontal_candidate_tap_6);
+			horizontal_mask_pair_mid <= pair_rgb(
+				horizontal_candidate_tap_2,
+				horizontal_candidate_tap_5);
+			horizontal_mask_pair_center <= pair_rgb(
+				horizontal_candidate_tap_3,
+				horizontal_candidate_tap_4);
 			horizontal_part_valid <= horizontal_mask_valid;
 			horizontal_total_valid <= horizontal_part_valid;
 			horizontal_blur_valid <= horizontal_total_valid;
@@ -1558,53 +1578,49 @@ module vfb_halo_wide #(
 			horizontal_part_epoch <= horizontal_mask_epoch;
 			horizontal_part_y <= horizontal_mask_y;
 			horizontal_part_edge_r <= spread8_edge(
-				horizontal_mask_tap_0[3*ENERGY_W-1:2*ENERGY_W],
-				horizontal_mask_tap_7[3*ENERGY_W-1:2*ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_edge[
+					3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_near_r <= spread8_near(
-				horizontal_mask_tap_1[3*ENERGY_W-1:2*ENERGY_W],
-				horizontal_mask_tap_6[3*ENERGY_W-1:2*ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_near[
+					3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_mid_r <= spread8_mid(
-				horizontal_mask_tap_2[3*ENERGY_W-1:2*ENERGY_W],
-				horizontal_mask_tap_5[3*ENERGY_W-1:2*ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_mid[
+					3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_center_r <= spread8_center(
-				horizontal_mask_tap_3[3*ENERGY_W-1:2*ENERGY_W],
-				horizontal_mask_tap_4[3*ENERGY_W-1:2*ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_center[
+					3*ENERGY_PAIR_W-1:2*ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_edge_g <= spread8_edge(
-				horizontal_mask_tap_0[2*ENERGY_W-1:ENERGY_W],
-				horizontal_mask_tap_7[2*ENERGY_W-1:ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_edge[
+					2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_near_g <= spread8_near(
-				horizontal_mask_tap_1[2*ENERGY_W-1:ENERGY_W],
-				horizontal_mask_tap_6[2*ENERGY_W-1:ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_near[
+					2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_mid_g <= spread8_mid(
-				horizontal_mask_tap_2[2*ENERGY_W-1:ENERGY_W],
-				horizontal_mask_tap_5[2*ENERGY_W-1:ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_mid[
+					2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_center_g <= spread8_center(
-				horizontal_mask_tap_3[2*ENERGY_W-1:ENERGY_W],
-				horizontal_mask_tap_4[2*ENERGY_W-1:ENERGY_W],
-				halo_spread_mode_q);
+				horizontal_mask_pair_center[
+					2*ENERGY_PAIR_W-1:ENERGY_PAIR_W],
+				horizontal_mask_spread_mode);
 			horizontal_part_edge_b <= spread8_edge(
-				horizontal_mask_tap_0[ENERGY_W-1:0],
-				horizontal_mask_tap_7[ENERGY_W-1:0],
-				halo_spread_mode_q);
+				horizontal_mask_pair_edge[ENERGY_PAIR_W-1:0],
+				horizontal_mask_spread_mode);
 			horizontal_part_near_b <= spread8_near(
-				horizontal_mask_tap_1[ENERGY_W-1:0],
-				horizontal_mask_tap_6[ENERGY_W-1:0],
-				halo_spread_mode_q);
+				horizontal_mask_pair_near[ENERGY_PAIR_W-1:0],
+				horizontal_mask_spread_mode);
 			horizontal_part_mid_b <= spread8_mid(
-				horizontal_mask_tap_2[ENERGY_W-1:0],
-				horizontal_mask_tap_5[ENERGY_W-1:0],
-				halo_spread_mode_q);
+				horizontal_mask_pair_mid[ENERGY_PAIR_W-1:0],
+				horizontal_mask_spread_mode);
 			horizontal_part_center_b <= spread8_center(
-				horizontal_mask_tap_3[ENERGY_W-1:0],
-				horizontal_mask_tap_4[ENERGY_W-1:0],
-				halo_spread_mode_q);
+				horizontal_mask_pair_center[ENERGY_PAIR_W-1:0],
+				horizontal_mask_spread_mode);
 
 			if (vertical_blur_valid &&
 			    vertical_blur_x + 1'b1 >= coarse_width) begin
@@ -1898,6 +1914,22 @@ module vfb_halo_wide #(
 		end
 	endfunction
 
+	// Free-running payload registers allow DSP output-register packing.
+	always_ff @(posedge clk_sys) begin
+		vertical_blend_s1_scaled_r <=
+			vertical_lerp_scaled_delta(
+				vertical_blend_s0_delta_r,
+				vertical_blend_s0_weight);
+		vertical_blend_s1_scaled_g <=
+			vertical_lerp_scaled_delta(
+				vertical_blend_s0_delta_g,
+				vertical_blend_s0_weight);
+		vertical_blend_s1_scaled_b <=
+			vertical_lerp_scaled_delta(
+				vertical_blend_s0_delta_b,
+				vertical_blend_s0_weight);
+	end
+
 	always_ff @(posedge clk_sys) begin
 		if (reset) begin
 			display_latest_bank <= 2'd0;
@@ -1963,9 +1995,6 @@ module vfb_halo_wide #(
 			vertical_blend_s1_base_r <= 15'sd0;
 			vertical_blend_s1_base_g <= 15'sd0;
 			vertical_blend_s1_base_b <= 15'sd0;
-			vertical_blend_s1_scaled_r <= 15'sd0;
-			vertical_blend_s1_scaled_g <= 15'sd0;
-			vertical_blend_s1_scaled_b <= 15'sd0;
 			halo_out_rgb <= 24'd0;
 			halo_out_valid <= 1'b0;
 			halo_pending_rgb <= 24'd0;
@@ -2024,8 +2053,7 @@ module vfb_halo_wide #(
 				interp_ramp_channel(previous_ramp_b)
 			};
 
-			// Vertical reconstruction uses the delta form:
-			//   prev<<4 + (latest-prev) * w
+			// Vertical reconstruction uses prev<<5 + (latest-prev) * weight.
 			// Only valid results can reach the visible halo.
 			vertical_blend_s0_weight <= vertical_weight_q;
 			vertical_blend_s0_prev_r <= horizontal_previous[23:16];
@@ -2046,18 +2074,6 @@ module vfb_halo_wide #(
 				vertical_lerp_base(vertical_blend_s0_prev_g);
 			vertical_blend_s1_base_b <=
 				vertical_lerp_base(vertical_blend_s0_prev_b);
-			vertical_blend_s1_scaled_r <=
-				vertical_lerp_scaled_delta(
-					vertical_blend_s0_delta_r,
-					vertical_blend_s0_weight);
-			vertical_blend_s1_scaled_g <=
-				vertical_lerp_scaled_delta(
-					vertical_blend_s0_delta_g,
-					vertical_blend_s0_weight);
-			vertical_blend_s1_scaled_b <=
-				vertical_lerp_scaled_delta(
-					vertical_blend_s0_delta_b,
-					vertical_blend_s0_weight);
 
 			// Prepare the next 16-pixel span before the current span ends:
 			//   x+11: choose the coarse row address

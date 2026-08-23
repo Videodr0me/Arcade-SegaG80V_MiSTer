@@ -42,6 +42,7 @@ module vfb_buffer_controller #(
 	output logic                 display_valid,
 	output logic                 display_is_composed,
 	output logic                 has_draw_buf,
+	output logic [BUFFER_COUNT-1:0] buf_draw_hot,
 	output logic                 raw_frame_dropped,
 	output logic [BUF_IDX_W-1:0] raw_frame_dropped_buf
 );
@@ -78,6 +79,7 @@ module vfb_buffer_controller #(
 	logic                 has_drawn;
 	logic                 has_dirty;
 	logic                 has_clean;
+	logic [BUFFER_COUNT-1:0] drawing_mask;
 	logic [BUFFER_COUNT-1:0] drawn_mask;
 	logic [BUFFER_COUNT-1:0] drawn_by_age;
 	logic [BUFFER_COUNT-1:0] drawn_at_age [0:BUFFER_COUNT-1];
@@ -117,6 +119,7 @@ module vfb_buffer_controller #(
 		has_drawn = 1'b0;
 		has_dirty = 1'b0;
 		has_clean = 1'b0;
+		drawing_mask = '0;
 		drawn_mask = '0;
 		display_idx = '0;
 		dirty_idx = '0;
@@ -130,8 +133,10 @@ module vfb_buffer_controller #(
 				display_idx = BUF_IDX_W'(i);
 			end
 
-			if (buf_state[i] == ST_DRAWING)
+			if (buf_state[i] == ST_DRAWING) begin
 				has_drawing = 1'b1;
+				drawing_mask[i] = 1'b1;
+			end
 
 			if (buf_state[i] == ST_DRAWN) begin
 				has_drawn = 1'b1;
@@ -192,10 +197,12 @@ module vfb_buffer_controller #(
 	logic                 has_draw_buf_reg;
 	logic                 display_valid_reg;
 	logic                 display_composed_reg;
+	(* preserve, dont_merge *) logic [BUFFER_COUNT-1:0] buf_draw_hot_reg;
 
 	assign buf_draw = internal_buf_draw;
 	assign buf_display_out = buf_display_reg;
 	assign has_draw_buf = has_draw_buf_reg;
+	assign buf_draw_hot = buf_draw_hot_reg;
 	assign display_valid = display_valid_reg;
 	assign display_is_composed = display_composed_reg;
 	assign compose_req = compose_active;
@@ -204,11 +211,13 @@ module vfb_buffer_controller #(
 		if (reset) begin
 			buf_display_reg <= '0;
 			has_draw_buf_reg <= 1'b0;
+			buf_draw_hot_reg <= '0;
 			display_valid_reg <= 1'b0;
 			display_composed_reg <= 1'b0;
 		end else begin
 			buf_display_reg <= display_idx;
 			has_draw_buf_reg <= has_drawing;
+			buf_draw_hot_reg <= drawing_mask;
 			display_valid_reg <= has_display;
 			display_composed_reg <= buffer_is_composed[display_idx];
 		end

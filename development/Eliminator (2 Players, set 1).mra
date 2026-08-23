@@ -1,8 +1,8 @@
 <misterromdescription>
-    <about author="alanswx" webpage="https://github.com/alanswx/Arcade-SegaG80V_MiSTer"/>
+    <about author="alanswx and Videodr0me" webpage="https://github.com/MiSTer-devel/Arcade-SegaG80V_MiSTer"/>
     <name>Eliminator (2 Players, set 1)</name>
     <setname>elim2</setname>
-    <rbf>Arcade-SegaG80V</rbf>
+	<rbf>SegaG80V</rbf>
     <mameversion>0283</mameversion>
     <year>1981</year>
     <manufacturer>Gremlin</manufacturer>
@@ -43,8 +43,8 @@
         <dip bits="2,3" values="1,2,3" ids="3,4,5" name="Lives"/>
         <dip bits="4,5" ids="Easy,Medium,Hard,Hardest" name="Difficulty"/>
         <dip bits="6,7" ids="30000,20000,10000,None" name="Bonus Life"/>
-        <dip bits="8,9,10,11" ids="4 Coins/1 Credit,3 Coins/1 Credit,2 Coins/1 Credit,1 Coin/1 Credit,1 Coin/2 Credits,1 Coin/3 Credits,1 Coin/4 Credits,1 Coin/5 Credits,1 Coin/6 Credits,2 Coins/1 Credit 5/3 6/4,2 Coins/1 Credit 4/3,1 Coin/1 Credit 5/6,1 Coin/1 Credit 4/5,1 Coin/1 Credit 2/3,1 Coin/2 Credits 5/11,1 Coin/2 Credits 4/9" name="Coin A"/>
-        <dip bits="12,13,14,15" ids="4 Coins/1 Credit,3 Coins/1 Credit,2 Coins/1 Credit,1 Coin/1 Credit,1 Coin/2 Credits,1 Coin/3 Credits,1 Coin/4 Credits,1 Coin/5 Credits,1 Coin/6 Credits,2 Coins/1 Credit 5/3 6/4,2 Coins/1 Credit 4/3,1 Coin/1 Credit 5/6,1 Coin/1 Credit 4/5,1 Coin/1 Credit 2/3,1 Coin/2 Credits 5/11,1 Coin/2 Credits 4/9" name="Coin B"/>
+        <dip bits="8,11" ids="4C/1Cr,3C/1Cr,2C/1Cr,1C/1Cr,1C/2Cr,1C/3Cr,1C/4Cr,1C/5Cr,1C/6Cr,2C/1Cr 5/3 6/4,2C/1Cr 4/3,1C/1Cr 5/6,1C/1Cr 4/5,1C/1Cr 2/3,1C/2Cr 5/11,1C/2Cr 4/9" name="Coin A"/>
+        <dip bits="12,15" ids="4C/1Cr,3C/1Cr,2C/1Cr,1C/1Cr,1C/2Cr,1C/3Cr,1C/4Cr,1C/5Cr,1C/6Cr,2C/1Cr 5/3 6/4,2C/1Cr 4/3,1C/1Cr 5/6,1C/1Cr 4/5,1C/1Cr 2/3,1C/2Cr 5/11,1C/2Cr 4/9" name="Coin B"/>
         <dip bits="16" ids="Trigger,Trigger" name="Self-Test"/>
     </switches>
 

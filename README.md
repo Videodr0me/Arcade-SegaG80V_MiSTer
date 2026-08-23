@@ -1,9 +1,10 @@
-# Star Trek and Tac/Scan for MiSTer FPGA
+# Star Trek, Tac/Scan, and Zektor for MiSTer FPGA
 
 An FPGA implementation of Sega's G80 color-vector arcade hardware for the
 [MiSTer FPGA](https://github.com/MiSTer-devel/Main_MiSTer/wiki) platform. The
-initial release includes **Star Trek: Strategic Operations Simulator** and
-**Tac/Scan**, two distinctive 1982 space games built on the same hardware.
+current release includes **Star Trek: Strategic Operations Simulator**,
+**Tac/Scan**, and **Zektor**, three distinctive 1982 space games built on the
+same hardware.
 
 Star Trek puts the Enterprise under direct command. Read the tactical scanner,
 fight through the forward view, fire phasers and photon torpedoes, engage
@@ -15,6 +16,11 @@ through its glowing space-warp tunnel. In 1982, this gave Tac/Scan extraordinary
 firepower for an arcade shooter: as many as seven player ships could fire at
 once.
 
+Zektor tasks the player with liberating eight cosmic cities seized by alien
+robots. Follow the warrior-maiden's call and join the fight against Roboprobes,
+Moboids, and Zizzers. The best warriors will confront each city's robot ruler
+in the ultimate vector battle.
+
 This core is a collaboration between **alanswx** and **Videodr0me**. The
 original G80V machine core and speech implementation were created by alanswx
 from Sega hardware documentation and Aaron Giles' detailed G80 research in
@@ -22,7 +28,8 @@ MAME.
 Videodr0me rebuilt the vector generator for high-resolution raster
 presentation, integrated the CRT-effects pipeline, added video modes and
 geometry controls, expanded input support, and refined Universal Sound Board
-filtering and mixing from Sega schematics and manuals.
+filtering and mixing from Sega schematics and manuals. He also rebuilt
+Zektor's discrete-audio implementation from its original schematics.
 
 ---
 
@@ -31,11 +38,11 @@ filtering and mixing from Sega schematics and manuals.
 | Subsystem | Original Hardware | FPGA Implementation |
 |---|---|---|
 | **Main CPU** | Z80 at 3.867120 MHz from the 15.46848 MHz master clock | Cycle-based Z80-compatible G80 machine core with Sega address-security support |
-| **Security** | Sega 315-0064 in Star Trek and 315-0076 in Tac/Scan | Game-selected address permutation matching each security device |
+| **Security** | Sega 315-0064 in Star Trek, 315-0076 in Tac/Scan, and 315-0082 in Zektor | Game-selected address permutation matching each security device |
 | **Vector Generator** | Sega X-Y Timing board, vector RAM, sine/cosine PROM, DACs, and analog deflection | Native G80 vector sequencer with a doubled-density shadow DDA and high-resolution raster presentation |
 | **Color** | Six-bit `RRGGBB` resistor-DAC output, with two bits per electron gun and 64 possible colors | All six native color bits are retained through drawing, crossings, phosphor decay, and presentation |
-| **Audio** | Universal Sound Board in both games; Star Trek adds an 8035-controlled SP0250 speech board | Universal Sound Board model plus Star Trek speech, with schematic-derived filtering, mixing, and level calibration |
-| **Display** | Horizontal color X-Y monitor in Star Trek; vertical color X-Y monitor in Tac/Scan | 1080p, 720p, 480p, 480i, and 240p output with rotation, bloom, halo, and phosphor behavior |
+| **Audio** | Universal Sound Board in Star Trek and Tac/Scan; Star Trek and Zektor use 8035-controlled SP0250 speech, while Zektor adds a discrete sound board and AY-3-8912 | Universal Sound Board and speech models plus schematic-derived Zektor discrete audio and AY sound, with calibrated filtering and mixing |
+| **Display** | Horizontal color X-Y monitor in Star Trek and Zektor; vertical color X-Y monitor in Tac/Scan | 1080p, 720p, 480p, 480i, and 240p output with rotation, bloom, halo, and phosphor behavior |
 | **Controls** | Rotary control and action buttons | Spinner, mouse, analog stick, or digital rotation with adjustable direction and sensitivity |
 
 ---
@@ -64,6 +71,22 @@ filtering and mixing from Sega schematics and manuals.
 | **Start 1 / Start 2** | Start a one-player or two-player game |
 | **Coin** | Insert a credit |
 
+### Zektor
+
+| Input | Function |
+|---|---|
+| **Left / Right, Spinner, Mouse, or Analog Stick** | Rotate the ship |
+| **Fire (Button A)** | Fire |
+| **Thrust (Button B)** | Apply thrust |
+| **Start 1 / Start 2** | Start a one-player or two-player game |
+| **Coin** | Insert a credit |
+
+### Keyboard
+
+Keyboard controls use MiSTer's per-core keyboard mapping and can be reassigned
+from the input mapping menu. Service and Self-Test remain in the DIP Switches
+menu.
+
 ### Input Controls Menu
 
 | Option | Function |
@@ -91,6 +114,7 @@ Copy the release RBF to `_Arcade/cores/` and these MRA files to `_Arcade/`:
 
 - `Star Trek.mra`
 - `Tac-Scan.mra`
+- `Zektor (revision B).mra`
 
 Launch a game through its MRA so MiSTer can assemble and download the required
 ROM image.
@@ -145,9 +169,7 @@ At 15 kHz, **15 kHz Format** selects 480i or 240p, with 480i used by default.
 Both formats require `vga_scaler=0` and `forced_scandoubler=0` for native
 output, as shown above.
 
-For a 31 kHz CRT, use
-`video_mode=720,480,60` instead.
-
+For a 31 kHz CRT, use `video_mode=720,480,60` instead.
 
 #### Direct Video
 
@@ -182,8 +204,9 @@ by your CRT connection.
 | **Custom 1 / Custom 2** | Two independent slots exposing the individual CRT controls. |
 | **Off** | True short-path bypass of the CRT effects. |
 
-**Neon Fever Dream** and **Mutara Nebula** can produce excessive flashing and
-bright light.
+> [!WARNING]
+> **Neon Fever Dream** and **Mutara Nebula** can produce excessive flashing and
+> bright light.
 
 Custom profiles expose Dot Scale, Tone Mapping, Bloom, Halo, Inter-Frame and
 Intra-Frame Decay, Color Space, Color Effect, and Slot Mask. Their exact
@@ -206,14 +229,16 @@ settings and every fixed-profile value are listed in the
 
 ## ROMs
 
-The initial release supports these MAME ROM sets:
+The release supports these MAME ROM sets:
 
 | Game | MRA | ROM archive |
 |---|---|---|
 | **Star Trek** | `releases/Star Trek.mra` | `startrek.zip` |
 | **Tac/Scan** | `releases/Tac-Scan.mra` | `tacscan.zip` |
+| **Zektor** | `releases/Zektor (revision B).mra` | `zektor.zip` |
 
-Eliminator, Space Fury, and Zektor remain development targets and are not part of the initial release.
+Eliminator and Space Fury remain development targets and are not part of this
+release.
 
 ## Compilation
 
@@ -224,7 +249,8 @@ Use Quartus Prime Lite 17.0.x. Open the project `Arcade-SegaG80V.qpf` and compil
 - **alanswx:** Original Sega G80V machine core, CPU and security integration,
   MRAs, and sound and speech foundation.
 - **Videodr0me:** High-resolution vector presentation, framebuffer and CRT
-  effects, expanded controls, and schematic-derived audio refinements.
+  effects, expanded controls, schematic-derived Universal Sound Board
+  filtering, and the Zektor discrete-audio implementation.
 - **Aaron Giles and MAME contributors:** detailed G80 machine, vector, and
   sound research and executable reference.
 - **JimmyStones and Arnim Laeuger:** T48 8035-compatible sound CPU work.

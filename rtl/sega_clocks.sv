@@ -2,7 +2,7 @@
 //  Sega G-80 X-Y machine clock
 //
 //  The G-80 X-Y boards run from a 15.46848 MHz crystal. Integer enables in
-//  sega_machine_timing preserves the original CPU and vector-clock phases.
+//  sega_machine_timing preserve the original CPU and vector-clock phases.
 //============================================================================
 
 module sega_clocks

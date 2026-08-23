@@ -1,5 +1,7 @@
 // The following code is a copy of the T48 core by Arnim Läuger which has been automatically converted to Verilog for ease of simulation
 // https://github.com/devsaurus/t48
+// Quartus one-hot case information is redundant for this generated source.
+// altera message_off 10264
 
 `timescale 1ps / 1ps
 

@@ -229,11 +229,11 @@ module segag80v #(
 
 	wire signed [15:0] usb_audio;
 	wire signed [15:0] speech_aux;
+	wire [7:0] ay_a, ay_b, ay_c;
 
 	sega_audio_router audio_router (
 		.game           (cfg_game),
 		.pause          (pause),
-		.ay_audio       (audio_ay),
 		.speech_audio   (audio_speech),
 		.usb_audio      (usb_audio),
 		.discrete_audio (audio_discrete),
@@ -322,6 +322,9 @@ module segag80v #(
 		.wr    (~snd_wr && snd_wr_d),
 		.sel   (snd_sel[0]),
 		.din   (snd_data),
+		.ay_a  (ay_a),
+		.ay_b  (ay_b),
+		.ay_c  (ay_c),
 		.audio (audio_discrete)
 	);
 	wire speech_ctrl_stb = ~speech_ctrl_wr && sp_ctrl_d;
@@ -335,6 +338,9 @@ module segag80v #(
 		.wr       (ay_wr_stb),
 		.addr_sel (ay_port_sel),
 		.din      (snd_data),
+		.channel_a(ay_a),
+		.channel_b(ay_b),
+		.channel_c(ay_c),
 		.audio    (audio_ay)
 	);
 

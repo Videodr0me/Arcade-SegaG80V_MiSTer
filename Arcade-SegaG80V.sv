@@ -38,7 +38,6 @@ module emu
 
 	logic clk_master;   // 15.46848 MHz Sega machine master
 	logic clk_125;
-	logic clk_50;
 	logic pll_locked;
 	logic master_pll_locked;
 
@@ -214,9 +213,9 @@ module emu
 		"DIP;",
 		"-;",
 		"R[0],Reset;",
-		// bits 4..12: fire1..fire4, start1, start2, coin, pause, service
-		"J1,Fire,Fire 2,Fire 3,Fire 4,Start 1,Start 2,Coin,Pause,Service;",
-		"jn,A,B,X,Y,Start,Select,R,L,;",
+		// bits 4..11: fire1..fire4, start1, start2, coin, pause
+		"J1,Fire,Fire 2,Fire 3,Fire 4,Start 1,Start 2,Coin,Pause;",
+		"jn,A,B,X,Y,Start,Select,R,L;",
 		"V,v1.0.", `BUILD_DATE
 	};
 
@@ -258,7 +257,7 @@ module emu
 		.rst(1'b0),
 		.outclk_0(clk_125),
 		.outclk_1(),
-		.outclk_2(clk_50),
+		.outclk_2(),
 		.locked(pll_locked)
 	);
 
@@ -358,8 +357,8 @@ module emu
 	);
 
 	wire [7:0] in_d7d6, in_d5d4, in_d3d2, in_d1d0, in_fc, in_coins;
-	wire       coin_a, coin_b, service_button;
-	wire       service = service_button & ~(|service_advance_count);
+	wire       coin_a, coin_b;
+	wire       service = ~(|service_advance_count);
 	sega_inputs inputs (
 		.game(game),
 		.joy1(joystick_0), .joy2(joystick_1),
@@ -368,7 +367,7 @@ module emu
 		.in_d7d6(in_d7d6), .in_d5d4(in_d5d4),
 		.in_d3d2(in_d3d2), .in_d1d0(in_d1d0),
 		.in_fc(in_fc), .in_coins(in_coins),
-		.coin_a(coin_a), .coin_b(coin_b), .service(service_button)
+		.coin_a(coin_a), .coin_b(coin_b)
 	);
 
 	wire dpad_l = joystick_0[1] | joystick_1[1];
@@ -402,7 +401,8 @@ module emu
 	pause #(8, 8, 8, 12) pause_inst (
 		.clk_sys(clk_master),
 		.reset(reset_master),
-		.user_button(joystick_0[11] | joystick_1[11]),   // pause
+		.user_button(joystick_0[11] | joystick_1[11] |
+		             joystick_2[11] | joystick_3[11]),
 		.pause_request(1'b0),
 		.options({~status[117], status[116]}),
 		.OSD_STATUS(OSD_STATUS),
@@ -467,7 +467,7 @@ module emu
 	sega_video video (
 		.clk_master(clk_master),
 		.vec_tick(vec_tick),
-		.clk_50(clk_50),
+		.clk_50(CLK_50M),
 		.clk_125(clk_125),
 		.reset(reset_125),
 		.upload_reset(!pll_locked),

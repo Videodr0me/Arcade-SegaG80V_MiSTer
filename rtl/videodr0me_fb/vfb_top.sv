@@ -158,7 +158,9 @@ module vfb_top (
 	wire [11:0] render_height_q = render_size_q[11:0];
 
 	wire fb_reset_request = reset;
-	wire fb_client_reset = fb_reset_request | arbiter_reset_busy;
+	// Stop new DDR work immediately, but retain the active requester until its
+	// Avalon transaction is idle. Reset all clients together at the safe edge.
+	wire fb_client_reset = arbiter_reset_busy && arbiter_idle;
 	(* altera_attribute = {"-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS"} *)
 	logic [1:0] source_reset_sync = 2'b11;
 	always_ff @(posedge clk_source)
@@ -166,8 +168,11 @@ module vfb_top (
 	wire source_reset = source_reset_sync[1];
 
 	logic filter_reset_q = 1'b1;
-	always_ff @(posedge clk_sys)
+	logic readout_reset_q = 1'b1;
+	always_ff @(posedge clk_sys) begin
 		filter_reset_q <= fb_reset_request | video_timing_reset;
+		readout_reset_q <= fb_client_reset | video_timing_reset;
+	end
 
 	// Measure frame timing in source clocks and store each frame's draw duration.
 	wire [2:0]  draw_idx;
@@ -280,12 +285,12 @@ module vfb_top (
 	wire [BUF_IDX_W-1:0] clear_buf_idx;
 	wire clear_done;
 	wire has_draw_buf;
+	wire [BUFFER_COUNT-1:0] buf_draw_hot;
 	wire display_valid;
 	wire display_is_composed;
 	wire [TILEMAP_ADDR_W-1:0] compose_tilemap_addr;
-	wire compose_tilemap_we;
-	wire [BUF_IDX_W-1:0] compose_tilemap_buf;
-	wire compose_tilemap_din;
+	wire [BUFFER_COUNT-1:0] compose_tilemap_write_hot;
+	wire compose_tilemap_write_din;
 	wire [BUFFER_COUNT-1:0] compose_tilemap_dout;
 
 	wire [28:0] display_buf_base = vfb_buffer_base(buf_display);
@@ -322,6 +327,7 @@ module vfb_top (
 		.display_is_composed(display_is_composed),
 
 		.has_draw_buf(has_draw_buf),
+		.buf_draw_hot(buf_draw_hot),
 		.raw_frame_dropped(raw_frame_dropped),
 		.raw_frame_dropped_buf(raw_frame_dropped_buf)
 	);
@@ -362,6 +368,7 @@ module vfb_top (
 		.buf_display(buf_display),
 		.display_valid(display_valid),
 		.has_draw_buf(has_draw_buf),
+		.buf_draw_hot(buf_draw_hot),
 
 		// DDRAM arbiter
 		.fill_ready(fill_ready),
@@ -383,9 +390,8 @@ module vfb_top (
 		.display_tile_addr(display_tile_addr),
 		.display_tile_dirty(display_tile_dirty),
 		.compose_tilemap_addr(compose_tilemap_addr),
-		.compose_tilemap_we(compose_tilemap_we),
-		.compose_tilemap_buf(compose_tilemap_buf),
-		.compose_tilemap_din(compose_tilemap_din),
+		.compose_tilemap_write_hot(compose_tilemap_write_hot),
+		.compose_tilemap_write_din(compose_tilemap_write_din),
 		.compose_tilemap_dout(compose_tilemap_dout)
 	);
 
@@ -429,9 +435,8 @@ module vfb_top (
 		.raw_frame_age(compose_frame_age),
 		.raw_metadata_ready(compose_metadata_ready),
 		.tilemap_addr(compose_tilemap_addr),
-		.tilemap_we(compose_tilemap_we),
-		.tilemap_buf(compose_tilemap_buf),
-		.tilemap_din(compose_tilemap_din),
+		.tilemap_write_hot(compose_tilemap_write_hot),
+		.tilemap_write_din(compose_tilemap_write_din),
 		.tilemap_dout(compose_tilemap_dout),
 		.read_ready(compose_read_ready),
 		.read_grant(compose_read_grant),
@@ -611,7 +616,7 @@ module vfb_top (
 		.TILE_SIZE(TILE_SIZE)
 	) readout_inst (
 		.clk_sys(clk_sys),
-		.reset(fb_client_reset | video_timing_reset),
+		.reset(readout_reset_q),
 
 		// DDRAM arbiter interface
 		.readout_ready(readout_ready),

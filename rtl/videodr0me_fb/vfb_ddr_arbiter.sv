@@ -1,8 +1,8 @@
 // ============================================================================
 // Fixed-priority DDRAM burst arbiter.
 // Written 2026 by Videodr0me
-// Priority is readout, flush, fill, then composition. Reset waits for an
-// active transaction to finish or time out.
+// Priority is readout, flush, fill, then composition. Reset blocks new work,
+// preserves the active Avalon transaction, and resets clients once it is idle.
 // ============================================================================
 
 module vfb_ddr_arbiter (
@@ -82,15 +82,10 @@ module vfb_ddr_arbiter (
 	logic [8:0] burst_counter = 0;
 	logic [8:0] burst_target  = 0;    // Beats in the current burst
 
-	// Synchronize reset and keep it active until the current burst finishes.
-	logic [1:0] rst_sync = 2'b11;
-	always_ff @(posedge clk_sys) rst_sync <= {rst_sync[0], rst_sys};
-	wire rst_ext = rst_sync[1];
-
+	// rst_sys is synchronous to clk_sys at this module boundary. Retain a short
+	// request until an in-flight burst reaches its mandatory safe boundary.
 	logic reset_pending = 0;
-	wire rst_active = rst_ext || reset_pending;
-	logic reset_busy_q = 1'b1;
-	always_ff @(posedge clk_sys) reset_busy_q <= rst_active;
+	assign reset_busy = rst_sys || reset_pending;
 
 	// Read and write controls before address and reset checks.
 	logic internal_rd = 0;
@@ -99,58 +94,31 @@ module vfb_ddr_arbiter (
 	// Limit access to the five framebuffer regions.
 	wire safe_address = (DDRAM_ADDR >= 29'h06000000) &&
 	                    (DDRAM_ADDR <= 29'h0654ffff);
-	assign DDRAM_WE = internal_we && safe_address && !rst_active;
+	assign DDRAM_WE = internal_we && safe_address;
 	assign DDRAM_RD = internal_rd && safe_address;
 
 	assign DDRAM_DIN =
-		(arb_state == ARB_FLUSH && !rst_active) ? flush_din :
-		(arb_state == ARB_COMPOSE_WRITE && !rst_active) ? compose_write_data :
+		(arb_state == ARB_FLUSH) ? flush_din :
+		(arb_state == ARB_COMPOSE_WRITE) ? compose_write_data :
 		64'd0;
 	assign DDRAM_BE =
-		(arb_state == ARB_FLUSH && !rst_active) ? flush_be :
-		(arb_state == ARB_COMPOSE_WRITE && !rst_active) ? compose_write_be :
+		(arb_state == ARB_FLUSH) ? flush_be :
+		(arb_state == ARB_COMPOSE_WRITE) ? compose_write_be :
 		8'h00;
 
-	assign flush_advance = (arb_state == ARB_FLUSH) && !DDRAM_BUSY && !rst_active;
+	assign flush_advance = (arb_state == ARB_FLUSH) && DDRAM_WE && !DDRAM_BUSY;
 	assign compose_write_advance = (arb_state == ARB_COMPOSE_WRITE) &&
-	                               !DDRAM_BUSY && !rst_active;
+	                               DDRAM_WE && !DDRAM_BUSY;
 	assign arbiter_idle = (arb_state == ARB_IDLE);
-	assign reset_busy = reset_busy_q;
-
-	localparam int RESET_DRAIN_WDOG_BITS = 16;
-
-	logic [RESET_DRAIN_WDOG_BITS-1:0] reset_drain_wdog = '0;
-
-	wire arb_read_state =
-		(arb_state == ARB_READOUT) || (arb_state == ARB_FILL) ||
-		(arb_state == ARB_COMPOSE_READ);
-
-	wire arb_drain_progress =
-		arb_read_state ? DDRAM_DOUT_READY :
-		((arb_state == ARB_FLUSH) || (arb_state == ARB_COMPOSE_WRITE))
-			? !DDRAM_BUSY :
-		1'b0;
-
-	wire reset_read_drain_timeout =
-		(arb_state != ARB_IDLE) &&
-		!arb_drain_progress &&
-		(&reset_drain_wdog);
 
 	always_ff @(posedge clk_sys) begin
-		// Finish the active burst before resetting the controller.
-		if (rst_ext) begin
-			if (arb_state != ARB_IDLE) reset_pending <= 1;
+		// Hold an Avalon request until waitrequest drops, then finish every
+		// accepted beat. Keep reset latched until the arbiter reaches idle.
+		// A timeout must not force IDLE while that transaction is still active.
+		if (rst_sys) begin
+			reset_pending <= 1'b1;
 		end else if (arb_state == ARB_IDLE) begin
-			reset_pending <= 0;
-		end
-
-		if (arb_state != ARB_IDLE) begin
-			if (arb_drain_progress)
-				reset_drain_wdog <= '0;
-			else
-				reset_drain_wdog <= reset_drain_wdog + 1'b1;
-		end else begin
-			reset_drain_wdog <= '0;
+			reset_pending <= 1'b0;
 		end
 
 		// Pulses remain low unless set below.
@@ -165,27 +133,11 @@ module vfb_ddr_arbiter (
 		fill_data_valid <= 0;
 		compose_read_data_valid <= 0;
 
-		if (reset_read_drain_timeout) begin
-			arb_state          <= ARB_IDLE;
-			reset_pending      <= 1'b0;
-			internal_rd        <= 1'b0;
-			internal_we        <= 1'b0;
-			burst_counter      <= '0;
-			burst_target       <= '0;
-			readout_grant      <= 1'b0;
-			fill_grant         <= 1'b0;
-			flush_grant        <= 1'b0;
-			compose_read_grant <= 1'b0;
-			compose_write_grant <= 1'b0;
-			readout_data_valid <= 1'b0;
-			fill_data_valid    <= 1'b0;
-			compose_read_data_valid <= 1'b0;
-		end else begin
-			case (arb_state)
+		case (arb_state)
 			ARB_IDLE: begin
 				burst_counter <= 0;
 
-				if (!rst_active) begin
+				if (!reset_busy) begin
 					// Choose the highest-priority waiting client.
 					if (readout_ready) begin
 						arb_state <= ARB_READOUT;
@@ -227,10 +179,10 @@ module vfb_ddr_arbiter (
 			end
 
 			ARB_READOUT: begin
-				if (!DDRAM_BUSY) internal_rd <= 0;
+				if (DDRAM_RD && !DDRAM_BUSY) internal_rd <= 0;
 
 				if (DDRAM_DOUT_READY) begin
-					if (!rst_active) begin
+					if (!reset_busy) begin
 						readout_data <= DDRAM_DOUT;
 						readout_data_valid <= 1;
 					end
@@ -241,10 +193,10 @@ module vfb_ddr_arbiter (
 			end
 
 			ARB_FILL: begin
-				if (!DDRAM_BUSY) internal_rd <= 0;
+				if (DDRAM_RD && !DDRAM_BUSY) internal_rd <= 0;
 
 				if (DDRAM_DOUT_READY) begin
-					if (!rst_active) begin
+					if (!reset_busy) begin
 						fill_data <= DDRAM_DOUT;
 						fill_data_valid <= 1;
 					end
@@ -255,23 +207,23 @@ module vfb_ddr_arbiter (
 			end
 
 			ARB_FLUSH: begin
-				if (!DDRAM_BUSY) begin
+				if (flush_advance) begin
 					burst_counter <= burst_counter + 1'b1;
 
 					if (burst_counter == burst_target - 1) begin
 						// The final beat was accepted.
 						internal_we <= 0;
-						if (!rst_active) flush_done <= 1;
+						if (!reset_busy) flush_done <= 1;
 						arb_state <= ARB_IDLE;
 					end
 				end
 			end
 
 			ARB_COMPOSE_READ: begin
-				if (!DDRAM_BUSY) internal_rd <= 0;
+				if (DDRAM_RD && !DDRAM_BUSY) internal_rd <= 0;
 
 				if (DDRAM_DOUT_READY) begin
-					if (!rst_active) begin
+					if (!reset_busy) begin
 						compose_read_data <= DDRAM_DOUT;
 						compose_read_data_valid <= 1;
 					end
@@ -282,11 +234,11 @@ module vfb_ddr_arbiter (
 			end
 
 			ARB_COMPOSE_WRITE: begin
-				if (!DDRAM_BUSY) begin
+				if (compose_write_advance) begin
 					burst_counter <= burst_counter + 1'b1;
 					if (burst_counter == burst_target - 1'b1) begin
 						internal_we <= 0;
-						if (!rst_active) compose_write_done <= 1;
+						if (!reset_busy) compose_write_done <= 1;
 						arb_state <= ARB_IDLE;
 					end
 				end
@@ -306,7 +258,6 @@ module vfb_ddr_arbiter (
 				compose_write_done <= 1'b0;
 			end
 		endcase
-		end
 	end
 
 endmodule

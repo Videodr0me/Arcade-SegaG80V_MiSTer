@@ -157,11 +157,12 @@ module vfb_rasterizer #(
 	// FIFO high-water LED, held for about 75 ms.
 	wire [FIFO_PTR_W-1:0] wr_ptr_bin = g2b(wr_ptr_g_sync2);
 	wire [FIFO_PTR_W-1:0] fifo_used = wr_ptr_bin - rd_ptr;
-	wire fifo_full_flag = (fifo_used > FIFO_PTR_W'(128));
 
+	logic fifo_full_flag_q = 0;
 	logic [23:0] led_timer = 0;
 	always_ff @(posedge clk_sys) begin
-		if (fifo_full_flag) led_timer <= 24'd9349794;
+		fifo_full_flag_q <= (fifo_used > FIFO_PTR_W'(128));
+		if (fifo_full_flag_q) led_timer <= 24'd9349794;
 		else if (led_timer != 0) led_timer <= led_timer - 1'b1;
 	end
 	assign fifo_full_led = (led_timer != 0);

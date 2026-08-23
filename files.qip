@@ -30,6 +30,8 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sp0250.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sega_speech.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/speech_filter.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/discrete_blocks.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sega_elim_sound.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sega_spacfury_sound.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/sega_discrete.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/usb_timer.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sound/usb_noise.sv
@@ -49,7 +51,6 @@ set_global_assignment -name VERILOG_FILE rtl/pause.v
 
 # --- videodr0me_fb vector renderer (vendored, see Research/) -----------------
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_layout_pkg.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_dac_ladder.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_sega_color.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_rasterizer.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_phosphor_timing.sv
