@@ -2,6 +2,14 @@
 
 All notable user-facing changes to this project are documented here.
 
+## Update [20260823]
+
+- Added Zektor (revision B), including spinner controls, speech, AY audio, and
+  its schematic-derived discrete sound board.
+- Updated the MiSTer framework integration from the latest Template_MiSTer
+  sources.
+- Tweak 480i sync compatibility
+
 ## Initial Release [20260814]
 
 - Star Trek: Strategic Operations Simulator and Tac/Scan.

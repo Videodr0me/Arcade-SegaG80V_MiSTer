@@ -18,7 +18,6 @@ endmodule
 module sega_audio_router (
 	input  wire        [2:0] game,
 	input  wire              pause,
-	input  wire signed [15:0] ay_audio,
 	input  wire signed [15:0] speech_audio,
 	input  wire signed [15:0] usb_audio,
 	input  wire signed [15:0] discrete_audio,
@@ -27,14 +26,13 @@ module sega_audio_router (
 );
 	import sega_game_pkg::*;
 
-	// Zektor's external-input trim is 179/256, approximately 0.7.
-	wire signed [16:0] zektor_sum = {ay_audio[15], ay_audio}
-	                                + {discrete_audio[15], discrete_audio};
-	wire signed [25:0] zektor_product = zektor_sum * 9'sd179;
-	wire signed [17:0] zektor_scaled = zektor_product[25:8];
+	// The Zektor board already contains the AY channels. Its speech-board
+	// external-input trim is 179/256, approximately 0.7.
+	wire signed [24:0] zektor_product = discrete_audio * 9'sd179;
+	wire signed [16:0] zektor_scaled = zektor_product[24:8];
 	wire signed [15:0] zektor_aux =
-		(zektor_scaled >  18'sd32767) ?  16'sh7FFF :
-		(zektor_scaled < -18'sd32768) ? -16'sh8000 : zektor_scaled[15:0];
+		(zektor_scaled >  17'sd32767) ?  16'sh7FFF :
+		(zektor_scaled < -17'sd32768) ? -16'sh8000 : zektor_scaled[15:0];
 
 	always_comb begin
 		speech_aux = 16'sd0;

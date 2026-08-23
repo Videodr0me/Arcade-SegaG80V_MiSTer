@@ -34,9 +34,8 @@ module vfb_phosphor_compositor #(
 	input  logic        raw_metadata_ready,
 
 	output logic [TILEMAP_ADDR_W-1:0] tilemap_addr,
-	output logic                      tilemap_we,
-	output logic [BUF_IDX_W-1:0]      tilemap_buf,
-	output logic                      tilemap_din,
+	output logic [BUFFER_COUNT-1:0]   tilemap_write_hot,
+	output logic                      tilemap_write_din,
 	input  logic [BUFFER_COUNT-1:0]   tilemap_dout,
 
 	output logic        read_ready,
@@ -210,6 +209,7 @@ module vfb_phosphor_compositor #(
 	comp_state_t state;
 	logic [BUF_IDX_W-1:0] source_buf_q;
 	logic [BUF_IDX_W-1:0] target_buf_q;
+	logic [BUFFER_COUNT-1:0] target_buf_hot_q;
 	logic                 has_source_q;
 	logic                 source_is_composed_q;
 	logic [1:0]           intra_mode_q;
@@ -250,9 +250,8 @@ module vfb_phosphor_compositor #(
 	logic [7:0] next_old_factor_q;
 	logic [8:0] raw_peak_q;
 	logic [8:0] old_peak_q;
-	logic [5:0] blend_color_q;
-	logic [6:0] blend_intensity_q;
-	logic       blend_fresh_q;
+	logic       raw_wins_q;
+	logic       old_present_q;
 	logic [15:0] pending_pixel_q;
 	logic [3:0]  pending_word_q;
 	logic [1:0]  pending_lane_q;
@@ -306,17 +305,18 @@ module vfb_phosphor_compositor #(
 		vfb_peak_energy(raw_r_energy, raw_g_energy, raw_b_energy);
 	wire [8:0] old_peak =
 		vfb_peak_energy(old_r_energy, old_g_energy, old_b_energy);
+	wire [5:0] selected_color = raw_wins_q ? raw_color_q :
+		old_present_q ? old_color_q : 6'd0;
+	wire [6:0] selected_intensity = raw_wins_q ? raw_intensity :
+		old_present_q ? old_intensity : 7'd0;
 	wire [15:0] stored_pixel = vfb_pack_composed_pixel(
-		blend_color_q, blend_fresh_q, blend_intensity_q);
+		selected_color, raw_wins_q, selected_intensity);
 	wire [5:0] pending_bit_offset = {pending_lane_q, 4'b0000};
 
 	assign read_burstcnt = 8'd16;
 	assign write_burstcnt = 8'd16;
 	assign write_data = composed_tile[write_beat];
 	assign write_be = 8'hff;
-	assign tilemap_we = (state == COMP_MAP_COMMIT);
-	assign tilemap_buf = target_buf_q;
-	assign tilemap_din = tile_nonzero;
 
 	always_ff @(posedge clk_sys) begin
 		if (reset) begin
@@ -327,8 +327,11 @@ module vfb_phosphor_compositor #(
 			write_ready <= 1'b0;
 			write_addr <= 29'd0;
 			tilemap_addr <= '0;
+			tilemap_write_hot <= '0;
+			tilemap_write_din <= 1'b0;
 			source_buf_q <= '0;
 			target_buf_q <= '0;
+			target_buf_hot_q <= '0;
 			has_source_q <= 1'b0;
 			source_is_composed_q <= 1'b0;
 			intra_mode_q <= 2'd0;
@@ -363,13 +366,13 @@ module vfb_phosphor_compositor #(
 			next_old_factor_q <= 8'd0;
 			raw_peak_q <= 9'd0;
 			old_peak_q <= 9'd0;
-			blend_color_q <= 6'd0;
-			blend_intensity_q <= 7'd0;
-			blend_fresh_q <= 1'b0;
+			raw_wins_q <= 1'b0;
+			old_present_q <= 1'b0;
 			pending_write_q <= 1'b0;
 		end else begin
 			compose_done <= 1'b0;
 			pending_write_q <= 1'b0;
+			tilemap_write_hot <= '0;
 
 			if (pending_write_q) begin
 				composed_tile[pending_word_q][pending_bit_offset +: 16]
@@ -382,6 +385,8 @@ module vfb_phosphor_compositor #(
 					if (compose_req) begin
 						source_buf_q <= compose_source_buf;
 						target_buf_q <= compose_target_buf;
+						target_buf_hot_q <=
+							{{(BUFFER_COUNT-1){1'b0}}, 1'b1} << compose_target_buf;
 						has_source_q <= compose_has_source;
 						source_is_composed_q <= compose_source_is_composed;
 						intra_mode_q <= intra_frame_mode_q;
@@ -525,20 +530,10 @@ module vfb_phosphor_compositor #(
 				end
 
 				COMP_PIXEL_SELECT: begin
-					if ((raw_peak_q != 9'd0) &&
-					    (raw_peak_q >= old_peak_q)) begin
-						blend_color_q <= raw_color_q;
-						blend_intensity_q <= raw_intensity;
-						blend_fresh_q <= 1'b1;
-					end else if (old_peak_q != 9'd0) begin
-						blend_color_q <= old_color_q;
-						blend_intensity_q <= old_intensity;
-						blend_fresh_q <= 1'b0;
-					end else begin
-						blend_color_q <= 6'd0;
-						blend_intensity_q <= 7'd0;
-						blend_fresh_q <= 1'b0;
-					end
+					raw_wins_q <=
+						(raw_peak_q != 9'd0) &&
+						(raw_peak_q >= old_peak_q);
+					old_present_q <= (old_peak_q != 9'd0);
 					state <= COMP_PIXEL_STORE;
 				end
 
@@ -547,7 +542,7 @@ module vfb_phosphor_compositor #(
 					pending_word_q <= pixel_index[5:2];
 					pending_lane_q <= pixel_index[1:0];
 					pending_nonzero_q <=
-						(blend_intensity_q != 7'd0);
+						(selected_intensity != 7'd0);
 					pending_write_q <= 1'b1;
 					if (pixel_index == 6'd63) begin
 						state <= COMP_PIXEL_DRAIN;
@@ -585,8 +580,11 @@ module vfb_phosphor_compositor #(
 				COMP_WRITE_WAIT: begin
 					if (write_advance && write_beat != 4'd15)
 						write_beat <= write_beat + 4'd1;
-					if (write_done)
+					if (write_done) begin
+						tilemap_write_hot <= target_buf_hot_q;
+						tilemap_write_din <= tile_nonzero;
 						state <= COMP_MAP_COMMIT;
+					end
 				end
 
 				COMP_MAP_COMMIT: begin

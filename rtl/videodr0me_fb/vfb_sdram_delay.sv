@@ -324,10 +324,10 @@ module vfb_sdram_delay #(
 
 	logic read_active;
 	logic [SLOT_W-1:0] read_slot;
-	logic [WORD_W:0] read_word_count;
 	logic [PAIR_W:0] read_pair_count;
 	logic [PAIR_W:0] read_issue_index;
-	logic [PAIR_W:0] read_response_index;
+	logic [PAIR_W:0] read_response_remaining;
+	logic read_words_odd;
 	logic [READ_FIFO_AW:0] read_outstanding;
 
 	logic [SLOT_W-1:0] read_desc_slot [0:READ_DESC_DEPTH-1];
@@ -370,6 +370,9 @@ module vfb_sdram_delay #(
 	wire [WORD_W:0] read_start_words =
 		read_start_queued ? read_desc_words[read_desc_rd_ptr]
 		                  : descriptor_apply_words;
+	wire [PAIR_W:0] read_start_pairs =
+		read_start_words[WORD_W:1] +
+		{{PAIR_W{1'b0}}, read_start_words[0]};
 
 	logic [12:0] decoded_canonical;
 	logic decoded_valid;
@@ -748,23 +751,15 @@ module vfb_sdram_delay #(
 		end
 	end
 
-	// Read responses remain 32 bits through the FIFO. The line word count
-	// suppresses the unused high halfword on odd-length lines.
-	wire [WORD_W:0] read_response_word_base =
-		{read_response_index, 1'b0};
-	wire read_low_real =
-		mem_rsp_valid && (read_response_word_base < read_word_count);
+	// Every requested pair contains a low word. Only the final high word can
+	// be padding when a line contains an odd number of RLE words.
+	wire read_response_last = (read_response_remaining == 1);
 	wire read_high_real =
-		mem_rsp_valid && (read_response_word_base + 1'b1 < read_word_count);
-	wire read_low_eol =
-		(read_response_word_base + 1'b1 == read_word_count);
-	wire read_high_real_eol =
-		(read_response_word_base + 2'd2 == read_word_count);
-	wire read_response_eol = read_low_eol || read_high_real_eol;
+		mem_rsp_valid && (!read_response_last || !read_words_odd);
 
-	assign read_fifo_push = read_low_real && !read_fifo_full;
+	assign read_fifo_push = mem_rsp_valid && !read_fifo_full;
 	assign read_fifo_write_data = {
-		read_response_eol,
+		read_response_last,
 		read_high_real,
 		mem_rsp_rdata
 	};
@@ -813,10 +808,10 @@ module vfb_sdram_delay #(
 			output_line_vblank <= 1'b1;
 			read_active       <= 1'b0;
 			read_slot         <= '0;
-			read_word_count   <= '0;
 			read_pair_count   <= '0;
 			read_issue_index  <= '0;
-			read_response_index <= '0;
+			read_response_remaining <= '0;
+			read_words_odd    <= 1'b0;
 			read_outstanding  <= '0;
 			read_desc_wr_ptr  <= '0;
 			read_desc_rd_ptr  <= '0;
@@ -951,14 +946,10 @@ module vfb_sdram_delay #(
 
 			if (read_start) begin
 				read_slot <= read_start_slot;
-				read_word_count <= read_start_words;
-				// Number of 32-bit SDR reads needed for the 16-bit RLE words:
-				// ceil(words / 2), explicitly sized to avoid implicit truncation.
-				read_pair_count <=
-					read_start_words[WORD_W:1] +
-					{{PAIR_W{1'b0}}, read_start_words[0]};
+				read_pair_count <= read_start_pairs;
 				read_issue_index <= '0;
-				read_response_index <= '0;
+				read_response_remaining <= read_start_pairs;
+				read_words_odd <= read_start_words[0];
 				read_active <= 1'b1;
 			end
 
@@ -993,10 +984,11 @@ module vfb_sdram_delay #(
 			endcase
 
 			if (mem_rsp_valid) begin
-				if (read_fifo_full && read_low_real)
+				if (read_fifo_full)
 					overflow <= 1'b1;
-				read_response_index <= read_response_index + 1'b1;
-				if (read_response_index + 1'b1 == read_pair_count)
+				read_response_remaining <=
+					read_response_remaining - 1'b1;
+				if (read_response_last)
 					read_active <= 1'b0;
 			end
 

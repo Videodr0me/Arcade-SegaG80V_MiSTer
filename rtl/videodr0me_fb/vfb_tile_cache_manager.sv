@@ -43,6 +43,7 @@ module vfb_tile_cache_manager #(
 	input  logic [BUF_IDX_W-1:0] buf_display,
 	input  logic        display_valid,
 	input  logic        has_draw_buf,
+	input  logic [BUFFER_COUNT-1:0] buf_draw_hot,
 
 	// DDRAM fill
 	output logic        fill_ready,
@@ -69,9 +70,8 @@ module vfb_tile_cache_manager #(
 	// Compositor tilemap port. All maps are read in parallel; only the
 	// composing destination map may be written through this port.
 	input  logic [14:0] compose_tilemap_addr,
-	input  logic        compose_tilemap_we,
-	input  logic [BUF_IDX_W-1:0] compose_tilemap_buf,
-	input  logic        compose_tilemap_din,
+	input  logic [BUFFER_COUNT-1:0] compose_tilemap_write_hot,
+	input  logic        compose_tilemap_write_din,
 	output logic [BUFFER_COUNT-1:0] compose_tilemap_dout
 );
 
@@ -167,6 +167,7 @@ module vfb_tile_cache_manager #(
 	typedef enum logic [3:0] {
 		RMW_IDLE,
 		RMW_READ,
+		RMW_READ2,
 		RMW_BLEND,
 		RMW_PEAK,
 		RMW_NORMALIZE,
@@ -205,7 +206,8 @@ module vfb_tile_cache_manager #(
 	logic [15:0] cache_wr_data_16_q;
 	logic [63:0] cache_wr_data_64 [0:CACHE_COUNT-1];
 
-	// All slots read the same word address.
+	// All slots read the same registered word address.
+	logic [3:0]  cache_read_addr_q;
 	logic [63:0] cache_ram_out [0:CACHE_COUNT-1];
 
 	(* ramstyle = "logic" *) logic [63:0] cache_ram [0:CACHE_COUNT-1][0:15];
@@ -222,6 +224,7 @@ module vfb_tile_cache_manager #(
 					if (cache_wr_byte[i] == 2'd3) cache_ram[i][cache_wr_word[i]][63:48] <= cache_wr_data_16_q;
 				end
 			end
+			cache_ram_out[i] <= cache_ram[i][cache_read_addr_q];
 		end
 	end
 
@@ -338,13 +341,12 @@ module vfb_tile_cache_manager #(
 	generate
 		for (g = 0; g < BUFFER_COUNT; g++) begin : gen_dirty_ram
 			(* ramstyle = "no_rw_check, M10K" *) logic buf_tilemap [0:TILEMAP_DEPTH-1];
-			wire compose_write = compose_tilemap_we &&
-			                     (compose_tilemap_buf == BUF_IDX_W'(g));
+			wire compose_write = compose_tilemap_write_hot[g];
 			wire tilemap_port_a_we = compose_write || buf_tilemap_we[g];
 			wire [TILEMAP_ADDR_W-1:0] tilemap_port_a_addr =
 				compose_write ? compose_tilemap_addr : buf_tilemap_addr[g];
 			wire tilemap_port_a_din =
-				compose_write ? compose_tilemap_din : buf_tilemap_din[g];
+				compose_write ? compose_tilemap_write_din : buf_tilemap_din[g];
 
 			always_ff @(posedge clk_sys) begin
 				if (tilemap_port_a_we) begin
@@ -433,10 +435,10 @@ module vfb_tile_cache_manager #(
 	end
 
 
-	// Select the cached pixel after the RAM read.
+	// Select the cached pixel after the registered address and RAM read.
 	logic [15:0] s2_cached_pixel;
 	always_ff @(posedge clk_sys) begin
-		if (rmw_state == RMW_READ) begin
+		if (rmw_state == RMW_READ2) begin
 			case (s1_offset_byte)
 				2'b00: s2_cached_pixel <= cache_ram_out[s1_cache_idx][15:0];
 				2'b01: s2_cached_pixel <= cache_ram_out[s1_cache_idx][31:16];
@@ -476,15 +478,78 @@ module vfb_tile_cache_manager #(
 	logic [8:0] blend_r_energy_q;
 	logic [8:0] blend_g_energy_q;
 	logic [8:0] blend_b_energy_q;
-	logic [8:0] blend_peak_q;
+	localparam logic [1:0] PEAK_RED   = 2'd0;
+	localparam logic [1:0] PEAK_GREEN = 2'd1;
+	localparam logic [1:0] PEAK_BLUE  = 2'd2;
+	logic [1:0] blend_peak_sel_q;
 	logic [6:0] blend_intensity_q;
-	logic [5:0] blend_color_q;
 	logic [2:0] blend_draw_idx_q;
-	wire [5:0] blend_color = vfb_normalize_color(
-		blend_r_energy_q, blend_g_energy_q, blend_b_energy_q,
-		blend_intensity_q);
+	logic [9:0] blend_intensity_x1_q;
+	logic [9:0] blend_intensity_x3_q;
+	logic [9:0] blend_intensity_x5_q;
+	wire [9:0] blend_intensity_ext = {3'd0, blend_intensity_q};
+
+	function automatic logic [1:0] quantize_channel(
+		input logic [8:0] energy,
+		input logic [9:0] intensity_x1,
+		input logic [9:0] intensity_x3,
+		input logic [9:0] intensity_x5
+	);
+		logic [9:0] energy_x2;
+		begin
+			energy_x2 = {1'b0, energy} << 1;
+			if ((intensity_x1 == 10'd0) || (energy_x2 <= intensity_x1))
+				quantize_channel = 2'd0;
+			else if (energy_x2 <= intensity_x3)
+				quantize_channel = 2'd1;
+			else if (energy_x2 <= intensity_x5)
+				quantize_channel = 2'd2;
+			else
+				quantize_channel = 2'd3;
+		end
+	endfunction
+
+	wire [5:0] blend_color = {
+		quantize_channel(blend_r_energy_q, blend_intensity_x1_q,
+			blend_intensity_x3_q, blend_intensity_x5_q),
+		quantize_channel(blend_g_energy_q, blend_intensity_x1_q,
+			blend_intensity_x3_q, blend_intensity_x5_q),
+		quantize_channel(blend_b_energy_q, blend_intensity_x1_q,
+			blend_intensity_x3_q, blend_intensity_x5_q)
+	};
 	wire [15:0] blended_pixel = vfb_pack_raw_pixel(
-		blend_color_q, blend_draw_idx_q, blend_intensity_q);
+		blend_color, blend_draw_idx_q, blend_intensity_q);
+
+	// The source pixel pair remains stable while the RMW payload advances.
+	always_ff @(posedge clk_sys) begin
+		blend_r_energy_q <= crossed_r_energy;
+		blend_g_energy_q <= crossed_g_energy;
+		blend_b_energy_q <= crossed_b_energy;
+		blend_draw_idx_q <= vfb_raw_draw_idx(s1_pixel_data);
+
+		if ((blend_r_energy_q >= blend_g_energy_q) &&
+		    (blend_r_energy_q >= blend_b_energy_q))
+			blend_peak_sel_q <= PEAK_RED;
+		else if (blend_g_energy_q >= blend_b_energy_q)
+			blend_peak_sel_q <= PEAK_GREEN;
+		else
+			blend_peak_sel_q <= PEAK_BLUE;
+
+		case (blend_peak_sel_q)
+			PEAK_RED: blend_intensity_q <=
+				vfb_normalize_peak(blend_r_energy_q);
+			PEAK_GREEN: blend_intensity_q <=
+				vfb_normalize_peak(blend_g_energy_q);
+			default: blend_intensity_q <=
+				vfb_normalize_peak(blend_b_energy_q);
+		endcase
+
+		blend_intensity_x1_q <= blend_intensity_ext;
+		blend_intensity_x3_q <=
+			blend_intensity_ext + (blend_intensity_ext << 1);
+		blend_intensity_x5_q <=
+			blend_intensity_ext + (blend_intensity_ext << 2);
+	end
 
 	// Full-cache flush
 	logic flush_all = 0;
@@ -613,7 +678,7 @@ module vfb_tile_cache_manager #(
 			for (int i=0; i<BUFFER_COUNT; i++) begin
 				automatic logic is_display = display_valid && (buf_display == BUF_IDX_W'(i));
 				automatic logic is_clear   = (clear_state == CLEAR_PROCESS && active_clear_buf == BUF_IDX_W'(i));
-				automatic logic is_draw    = has_draw_buf && (buf_draw == BUF_IDX_W'(i));
+				automatic logic is_draw    = buf_draw_hot[i];
 
 				if (is_display) begin
 					buf_tilemap_addr[i] = display_tile_addr;
@@ -625,10 +690,8 @@ module vfb_tile_cache_manager #(
 					end
 				end else if (is_draw) begin
 					buf_tilemap_addr[i] = draw_tilemap_addr;
-					if (has_draw_buf) begin
-						buf_tilemap_we[i] = draw_we;
-						buf_tilemap_din[i] = draw_din;
-					end
+					buf_tilemap_we[i] = draw_we;
+					buf_tilemap_din[i] = draw_din;
 				end
 			end
 		end
@@ -703,31 +766,12 @@ module vfb_tile_cache_manager #(
 		(rmw_state == RMW_WAIT_FILL) && fill_data_valid &&
 		(fill_beat_int == 4'd15);
 
-	// Prefetch the row paired with the front input entry. A miss keeps the
-	// requested row selected until the filled cache line is ready.
-	wire [3:0] front_read_addr =
-		load_primary  ? pixel_offset[5:2] :
-		unload_buffer ? r_offset_word_buf : s0_offset_word;
-
-	wire hold_rmw_read =
-		((rmw_state == RMW_WAIT_DIRTY_BIT) && !fast_tag_allocation) ||
-		(rmw_state == RMW_WAIT_FILL) ||
-		(rmw_state == RMW_WAIT_FILL_FINISH);
-	wire [3:0] cache_read_addr =
-		hold_rmw_read ? s1_offset_word : front_read_addr;
-
-	// Keep a local address copy beside each logic-RAM cache slot. The register
-	// boundary removes the RMW-state decode from the cache read-data cone.
-	genvar cache_slot;
-	generate
-		for (cache_slot = 0; cache_slot < CACHE_COUNT; cache_slot++) begin : gen_cache_read
-			(* preserve, dont_merge *) logic [3:0] read_addr_q;
-			always_ff @(posedge clk_sys) begin
-				read_addr_q <= cache_read_addr;
-				cache_ram_out[cache_slot] <= cache_ram[cache_slot][read_addr_q];
-			end
-		end
-	endgenerate
+	// Register the row before reading the cache arrays. RMW states retain the
+	// accepted pixel's row while IDLE prepares the front input entry.
+	always_ff @(posedge clk_sys) begin
+		cache_read_addr_q <=
+			(rmw_state == RMW_IDLE) ? s0_offset_word : s1_offset_word;
+	end
 
 	wire tag_map_unstable =
 		(rmw_state == RMW_FLUSH_ALL) ||
@@ -826,7 +870,7 @@ module vfb_tile_cache_manager #(
 						flush_all <= 1;
 						eof_flush_idx <= 0;
 						rmw_state <= RMW_FLUSH_ALL;
-					end else if (s0_valid && s0_ready) begin
+					end else if (s0_valid && manager_ready && r_hit_valid) begin
 						if (s0_eof) begin
 							// EOF reached the front of the input buffer.
 							eof_token_popped <= 1;
@@ -984,34 +1028,28 @@ module vfb_tile_cache_manager #(
 				end
 
 				RMW_READ: begin
+					rmw_state <= RMW_READ2;
+				end
+
+				RMW_READ2: begin
 					rmw_state <= RMW_BLEND;
 				end
 
 				RMW_BLEND: begin
-					blend_r_energy_q <= crossed_r_energy;
-					blend_g_energy_q <= crossed_g_energy;
-					blend_b_energy_q <= crossed_b_energy;
-					blend_draw_idx_q <= vfb_raw_draw_idx(s1_pixel_data);
 					rmw_state <= RMW_PEAK;
 				end
 
 				RMW_PEAK: begin
-					blend_peak_q <= vfb_peak_energy(
-						blend_r_energy_q, blend_g_energy_q,
-						blend_b_energy_q);
 					rmw_state <= RMW_NORMALIZE;
 				end
 
 				RMW_NORMALIZE: begin
-					blend_intensity_q <=
-						vfb_normalize_peak(blend_peak_q);
 					rmw_tilemap_addr_q <= s1_tilemap_addr;
 					rmw_tilemap_mark_q <= 1'b1;
 					rmw_state <= RMW_COLOR;
 				end
 
 				RMW_COLOR: begin
-					blend_color_q <= blend_color;
 					rmw_state <= RMW_MODIFY;
 				end
 

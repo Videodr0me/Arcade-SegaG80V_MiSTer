@@ -1,8 +1,8 @@
 <misterromdescription>
-    <about author="alanswx" webpage="https://github.com/alanswx/Arcade-SegaG80V_MiSTer"/>
+    <about author="alanswx and Videodr0me" webpage="https://github.com/MiSTer-devel/Arcade-SegaG80V_MiSTer"/>
     <name>Eliminator (4 Players, prototype)</name>
     <setname>elim4p</setname>
-    <rbf>Arcade-SegaG80V</rbf>
+	<rbf>SegaG80V</rbf>
     <mameversion>0283</mameversion>
     <year>1981</year>
     <manufacturer>Gremlin</manufacturer>

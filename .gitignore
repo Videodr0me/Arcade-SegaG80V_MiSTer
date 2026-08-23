@@ -43,6 +43,7 @@ sim/audio/output/
 # Local simulation, captures, and engineering notes
 /Research/
 /sim/
+/simulation/
 /snap/
 /docs/
 /tcl/

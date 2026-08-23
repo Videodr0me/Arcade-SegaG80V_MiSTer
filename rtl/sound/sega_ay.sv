@@ -2,7 +2,7 @@
 //  Zektor AY-3-8912
 //
 //  Clocked at 15.46848 MHz / 8. Port $3C selects a register and $3D writes it.
-//  Equal 10K channel loads are modeled by summing JT49's channel outputs.
+//  Equal 1K channel loads are modeled by summing JT49's channel outputs.
 //
 //  This program is free software under the GNU General Public License v3.
 //============================================================================
@@ -18,7 +18,10 @@ module sega_ay (
 	input  wire        addr_sel,  // 0 = $3C (address latch), 1 = $3D (data)
 	input  wire  [7:0] din,
 
-	output wire signed [15:0] audio   // DC-blocked, signed
+	output wire  [7:0] channel_a,
+	output wire  [7:0] channel_b,
+	output wire  [7:0] channel_c,
+	output wire signed [15:0] audio
 );
 
 	// Hold each data write until JT49's next clock enable.
@@ -44,6 +47,9 @@ module sega_ay (
 	end
 
 	wire [7:0] ch_a, ch_b, ch_c;
+	assign channel_a = ch_a;
+	assign channel_b = ch_b;
+	assign channel_c = ch_c;
 
 	jt49 psg (
 		.rst_n   (~reset),

@@ -89,12 +89,14 @@ module sega_video
 );
 
 	// HDMI height can change while the framework settles at startup.
-	logic [11:0] height_meta_50 = 12'd0;
-	logic [11:0] height_sync_50 = 12'd0;
+	(* altera_attribute = {"-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS"} *)
+	logic [11:0] height_meta_50 = 12'd0, height_sync_50 = 12'd0;
 	logic [11:0] height_candidate_50 = 12'd0;
 	logic [11:0] height_stable_50 = 12'd0;
 	logic [24:0] height_timer_50 = 25'd0;
+	(* altera_attribute = {"-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS"} *)
 	logic direct_video_meta_50 = 1'b0, direct_video_sync_50 = 1'b0;
+	(* altera_attribute = {"-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS"} *)
 	logic direct_31khz_meta_50 = 1'b0, direct_31khz_sync_50 = 1'b0;
 	(* altera_attribute = {"-name SYNCHRONIZER_IDENTIFICATION FORCED_IF_ASYNCHRONOUS"} *)
 	logic upload_reset_50_meta = 1'b1, upload_reset_50 = 1'b1;
@@ -166,6 +168,7 @@ module sega_video
 	localparam logic [1:0] PIXEL_FULL = 2'd0;
 	localparam logic [1:0] PIXEL_HALF = 2'd1;
 	localparam logic [1:0] PIXEL_FRACTIONAL = 2'd2;
+	// Fractional modes emit step / (step + wrap) pixel events per clock.
 
 	typedef struct packed {
 		logic [11:0] fb_width;
@@ -256,8 +259,8 @@ module sega_video
 				mode.vs_start = 12'd246;
 				mode.vs_end = 12'd249;
 				mode.pixel_mode = PIXEL_FRACTIONAL;
-				mode.pixel_step = 18'd2448;
-				mode.pixel_wrap = 18'd19427;
+				mode.pixel_step = 18'd884;
+				mode.pixel_wrap = 18'd7015;
 				mode.is_720p = 1'b0;
 				mode.is_240p = 1'b1;
 				mode.is_120hz = 1'b0;
@@ -277,8 +280,8 @@ module sega_video
 				mode.vs_start = 12'd493;
 				mode.vs_end = 12'd499;
 				mode.pixel_mode = PIXEL_FRACTIONAL;
-				mode.pixel_step = 18'd53958;
-				mode.pixel_wrap = 18'd186667;
+				mode.pixel_step = 18'd442;
+				mode.pixel_wrap = 18'd1529;
 				mode.is_720p = 1'b0;
 				mode.is_480p = 1'b1;
 				mode.is_120hz = 1'b0;

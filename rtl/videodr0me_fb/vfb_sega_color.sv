@@ -21,17 +21,15 @@ module vfb_sega_color (
 	localparam logic [1:0] TONE_LINEAR2 = 2'd1;
 	localparam logic [1:0] TONE_BRIGHT  = 2'd2;
 
-	function automatic logic [9:0] native_level(input logic [6:0] intensity);
-		logic [13:0] scaled;
-		begin
-			// 96 * 85 / 32 = 255. Values above 96 retain crossing headroom.
-			scaled = ({7'd0, intensity} << 6) +
-			         ({7'd0, intensity} << 4) +
-			         ({7'd0, intensity} << 2) +
-			          {7'd0, intensity};
-			native_level = scaled[13:5];
-		end
-	endfunction
+	(* romstyle = "M10K" *) logic [9:0] native_level_lut [0:127];
+	integer native_level_idx;
+	initial begin
+		for (native_level_idx = 0; native_level_idx < 128;
+		     native_level_idx = native_level_idx + 1)
+			// Original formula: floor(intensity * 85 / 32).
+			native_level_lut[native_level_idx] =
+				10'((native_level_idx * 85) >> 5);
+	end
 
 	function automatic logic [7:0] add_spill(
 		input logic [9:0] level,
@@ -47,15 +45,30 @@ module vfb_sega_color (
 		end
 	endfunction
 
+	// 6.2K/12K DAC levels use 683/2048 and 1365/2048 for one and two thirds.
+	function automatic logic [11:0] ladder_coefficient(input logic [1:0] select);
+		begin
+			case (select)
+				2'd0: ladder_coefficient = 12'd0;
+				2'd1: ladder_coefficient = 12'd683;
+				2'd2: ladder_coefficient = 12'd1365;
+				2'd3: ladder_coefficient = 12'd2048;
+				default: ladder_coefficient = 12'd0;
+			endcase
+		end
+	endfunction
+
 	logic [12:0] sample_s1;
 	logic [1:0]  tone_s1;
 	logic [9:0]  level_s1;
+	wire sample_active = (vfb_sample_color(canonical_in) != 6'd0) &&
+	                     (vfb_sample_intensity(canonical_in) != 7'd0);
 
 	always_ff @(posedge clk_sys) begin
 		if (ce_pix) begin
-			sample_s1 <= canonical_in;
+			sample_s1 <= sample_active ? canonical_in : 13'd0;
 			tone_s1 <= tone_mapping;
-			level_s1 <= native_level(vfb_sample_intensity(canonical_in));
+			level_s1 <= native_level_lut[vfb_sample_intensity(canonical_in)];
 		end
 	end
 
@@ -111,33 +124,23 @@ module vfb_sega_color (
 
 	logic [12:0] sample_s3;
 	logic [9:0]  tone_level_s3;
+	logic [11:0] red_coeff_s3;
+	logic [11:0] green_coeff_s3;
+	logic [11:0] blue_coeff_s3;
+	wire [5:0] color_s2 = vfb_sample_color(sample_s2);
 	always_ff @(posedge clk_sys) begin
 		if (ce_pix) begin
 			sample_s3 <= sample_s2;
 			tone_level_s3 <= tone_level_comb;
+			red_coeff_s3 <= ladder_coefficient(color_s2[5:4]);
+			green_coeff_s3 <= ladder_coefficient(color_s2[3:2]);
+			blue_coeff_s3 <= ladder_coefficient(color_s2[1:0]);
 		end
 	end
 
-	wire [9:0] red_ladder_comb;
-	wire [9:0] green_ladder_comb;
-	wire [9:0] blue_ladder_comb;
-	wire [5:0] color_s3 = vfb_sample_color(sample_s3);
-
-	vfb_dac_ladder red_dac (
-		.level(tone_level_s3),
-		.sel(color_s3[5:4]),
-		.out(red_ladder_comb)
-	);
-	vfb_dac_ladder green_dac (
-		.level(tone_level_s3),
-		.sel(color_s3[3:2]),
-		.out(green_ladder_comb)
-	);
-	vfb_dac_ladder blue_dac (
-		.level(tone_level_s3),
-		.sel(color_s3[1:0]),
-		.out(blue_ladder_comb)
-	);
+	wire [21:0] red_ladder_product = tone_level_s3 * red_coeff_s3;
+	wire [21:0] green_ladder_product = tone_level_s3 * green_coeff_s3;
+	wire [21:0] blue_ladder_product = tone_level_s3 * blue_coeff_s3;
 
 	logic [12:0] sample_s4;
 	logic [9:0]  red_ladder_s4;
@@ -146,9 +149,9 @@ module vfb_sega_color (
 	always_ff @(posedge clk_sys) begin
 		if (ce_pix) begin
 			sample_s4 <= sample_s3;
-			red_ladder_s4 <= red_ladder_comb;
-			green_ladder_s4 <= green_ladder_comb;
-			blue_ladder_s4 <= blue_ladder_comb;
+			red_ladder_s4 <= red_ladder_product[20:11];
+			green_ladder_s4 <= green_ladder_product[20:11];
+			blue_ladder_s4 <= blue_ladder_product[20:11];
 		end
 	end
 

@@ -32,14 +32,13 @@ module sega_inputs (
 	output logic [7:0] in_fc,
 	output logic [7:0] in_coins,
 	output wire        coin_a,
-	output wire        coin_b,
-	output wire        service
+	output wire        coin_b
 );
 
 	// MiSTer joystick bits, matching the OSD "J1," line in the top level:
 	//   0 right  1 left  2 down  3 up
 	//   4 fire1  5 fire2  6 fire3  7 fire4
-	//   8 start1 9 start2 10 coin 11 pause 12 service
+	//   8 start1 9 start2 10 coin 11 pause
 	wire p1_r = joy1[0], p1_l = joy1[1], p1_b1 = joy1[4], p1_b2 = joy1[5];
 	wire p1_b3 = joy1[6], p1_b4 = joy1[7];
 	wire p2_r = joy2[0], p2_l = joy2[1], p2_b1 = joy2[4], p2_b2 = joy2[5];
@@ -49,12 +48,14 @@ module sega_inputs (
 	wire start1 = joy1[8] | joy2[8];
 	wire start2 = joy1[9] | joy2[9];
 
-	wire coin1 = joy1[10] | joy3[10];
-	wire coin2 = joy2[10] | joy4[10];
+	wire coin1 = (game == sega_game_pkg::GAME_ELIM4) ?
+		(|{joy4[10], joy3[10], joy2[10], joy1[10]}) :
+		(joy1[10] | joy3[10]);
+	wire coin2 = (game == sega_game_pkg::GAME_ELIM4) ?
+		1'b0 : (joy2[10] | joy4[10]);
 
-	assign coin_a  = ~coin1;                       // active low
+	assign coin_a  = ~coin1;
 	assign coin_b  = ~coin2;
-	assign service = ~(joy1[12] | joy2[12]);
 
 	always_comb begin
 		in_d7d6  = 8'hFF;
@@ -115,7 +116,8 @@ module sega_inputs (
 			in_d5d4[7] = ~p1_l;
 			in_fc      = {~p3_l, ~p3_r, ~p3_b2, ~p3_b1,
 			              ~p4_l, ~p4_r, ~p4_b2, ~p4_b1};
-			in_coins   = {4'hF, ~joy4[10], ~joy3[10], ~coin2, ~coin1};
+			in_coins   = {4'hF, ~joy4[10], ~joy3[10],
+			              ~joy2[10], ~joy1[10]};
 		end
 
 		// ---- Space Fury -------------------------------------------------

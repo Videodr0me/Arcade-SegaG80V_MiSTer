@@ -113,6 +113,7 @@ module vfb_readout #(
 	typedef enum logic [2:0] {
 		IDLE,
 		SCAN_WAIT,
+		SCAN_CAPTURE,
 		SCAN_DECIDE,
 		ZERO_DATA,
 		BURST_REQ,
@@ -173,6 +174,7 @@ module vfb_readout #(
 	logic [7:0] target_fetch_y;
 	logic [14:0] fetch_tile_addr;
 	logic       row0_prefetch_active;
+	logic       scan_tile_dirty = 1'b0;
 
 	logic [7:0] run_start_x;
 	logic [4:0] run_length;     // Dirty tiles in the pending burst
@@ -228,11 +230,16 @@ module vfb_readout #(
 
 				SCAN_WAIT: begin
 					// Wait one cycle for the synchronous tilemap query.
+					fetch_state <= SCAN_CAPTURE;
+				end
+
+				SCAN_CAPTURE: begin
+					scan_tile_dirty <= display_tile_dirty;
 					fetch_state <= SCAN_DECIDE;
 				end
 
 				SCAN_DECIDE: begin
-					if (display_tile_dirty) begin
+					if (scan_tile_dirty) begin
 						if (run_length == 0) run_start_x <= fetch_tile_x;
 
 						if (row_end) begin
@@ -454,109 +461,120 @@ module vfb_readout #(
 	wire [5:0] pixel_color_comb = vfb_pixel_color(raw_pixel);
 	wire [6:0] pixel_int_comb = vfb_pixel_intensity(raw_pixel);
 
-	// Map the stored draw-time phase to physical age.
-	wire [2:0] pixel_draw_idx = vfb_raw_draw_idx(raw_pixel);
-	wire [2:0] pixel_age_raw = draw_idx - pixel_draw_idx;
-	wire [4:0] pixel_age_map_offset = {pixel_age_raw, 2'b00};
-	wire [3:0] pixel_age = phosphor_age_map[pixel_age_map_offset +: 4];
-
 	// Approximate 8-bit exponential factors for bases 0.94, 0.96, and 0.98.
-	reg [7:0] decay_factor_comb;
-	always_comb begin
-		case ({phosphor_mode_control_q, pixel_age})
+	function automatic logic [7:0] decay_factor(
+		input logic [1:0] mode,
+		input logic [3:0] age
+	);
+		case ({mode, age})
 			// LUT A (mode 1, base 0.94)
-			{2'd1, 4'd0}:  decay_factor_comb = 8'd255;
-			{2'd1, 4'd1}:  decay_factor_comb = 8'd240;
-			{2'd1, 4'd2}:  decay_factor_comb = 8'd225;
-			{2'd1, 4'd3}:  decay_factor_comb = 8'd212;
-			{2'd1, 4'd4}:  decay_factor_comb = 8'd199;
-			{2'd1, 4'd5}:  decay_factor_comb = 8'd187;
-			{2'd1, 4'd6}:  decay_factor_comb = 8'd176;
-			{2'd1, 4'd7}:  decay_factor_comb = 8'd165;
-			{2'd1, 4'd8}:  decay_factor_comb = 8'd155;
-			{2'd1, 4'd9}:  decay_factor_comb = 8'd146;
-			{2'd1, 4'd10}: decay_factor_comb = 8'd137;
-			{2'd1, 4'd11}: decay_factor_comb = 8'd129;
-			{2'd1, 4'd12}: decay_factor_comb = 8'd121;
-			{2'd1, 4'd13}: decay_factor_comb = 8'd114;
-			{2'd1, 4'd14}: decay_factor_comb = 8'd107;
-			{2'd1, 4'd15}: decay_factor_comb = 8'd101;
+			{2'd1, 4'd0}:  decay_factor = 8'd255;
+			{2'd1, 4'd1}:  decay_factor = 8'd240;
+			{2'd1, 4'd2}:  decay_factor = 8'd225;
+			{2'd1, 4'd3}:  decay_factor = 8'd212;
+			{2'd1, 4'd4}:  decay_factor = 8'd199;
+			{2'd1, 4'd5}:  decay_factor = 8'd187;
+			{2'd1, 4'd6}:  decay_factor = 8'd176;
+			{2'd1, 4'd7}:  decay_factor = 8'd165;
+			{2'd1, 4'd8}:  decay_factor = 8'd155;
+			{2'd1, 4'd9}:  decay_factor = 8'd146;
+			{2'd1, 4'd10}: decay_factor = 8'd137;
+			{2'd1, 4'd11}: decay_factor = 8'd129;
+			{2'd1, 4'd12}: decay_factor = 8'd121;
+			{2'd1, 4'd13}: decay_factor = 8'd114;
+			{2'd1, 4'd14}: decay_factor = 8'd107;
+			{2'd1, 4'd15}: decay_factor = 8'd101;
 			// LUT B (mode 2, base 0.96)
-			{2'd2, 4'd0}:  decay_factor_comb = 8'd255;
-			{2'd2, 4'd1}:  decay_factor_comb = 8'd245;
-			{2'd2, 4'd2}:  decay_factor_comb = 8'd235;
-			{2'd2, 4'd3}:  decay_factor_comb = 8'd226;
-			{2'd2, 4'd4}:  decay_factor_comb = 8'd217;
-			{2'd2, 4'd5}:  decay_factor_comb = 8'd208;
-			{2'd2, 4'd6}:  decay_factor_comb = 8'd200;
-			{2'd2, 4'd7}:  decay_factor_comb = 8'd192;
-			{2'd2, 4'd8}:  decay_factor_comb = 8'd184;
-			{2'd2, 4'd9}:  decay_factor_comb = 8'd177;
-			{2'd2, 4'd10}: decay_factor_comb = 8'd170;
-			{2'd2, 4'd11}: decay_factor_comb = 8'd163;
-			{2'd2, 4'd12}: decay_factor_comb = 8'd156;
-			{2'd2, 4'd13}: decay_factor_comb = 8'd150;
-			{2'd2, 4'd14}: decay_factor_comb = 8'd144;
-			{2'd2, 4'd15}: decay_factor_comb = 8'd138;
+			{2'd2, 4'd0}:  decay_factor = 8'd255;
+			{2'd2, 4'd1}:  decay_factor = 8'd245;
+			{2'd2, 4'd2}:  decay_factor = 8'd235;
+			{2'd2, 4'd3}:  decay_factor = 8'd226;
+			{2'd2, 4'd4}:  decay_factor = 8'd217;
+			{2'd2, 4'd5}:  decay_factor = 8'd208;
+			{2'd2, 4'd6}:  decay_factor = 8'd200;
+			{2'd2, 4'd7}:  decay_factor = 8'd192;
+			{2'd2, 4'd8}:  decay_factor = 8'd184;
+			{2'd2, 4'd9}:  decay_factor = 8'd177;
+			{2'd2, 4'd10}: decay_factor = 8'd170;
+			{2'd2, 4'd11}: decay_factor = 8'd163;
+			{2'd2, 4'd12}: decay_factor = 8'd156;
+			{2'd2, 4'd13}: decay_factor = 8'd150;
+			{2'd2, 4'd14}: decay_factor = 8'd144;
+			{2'd2, 4'd15}: decay_factor = 8'd138;
 			// LUT C (mode 3, base 0.98)
-			{2'd3, 4'd0}:  decay_factor_comb = 8'd255;
-			{2'd3, 4'd1}:  decay_factor_comb = 8'd250;
-			{2'd3, 4'd2}:  decay_factor_comb = 8'd245;
-			{2'd3, 4'd3}:  decay_factor_comb = 8'd240;
-			{2'd3, 4'd4}:  decay_factor_comb = 8'd235;
-			{2'd3, 4'd5}:  decay_factor_comb = 8'd230;
-			{2'd3, 4'd6}:  decay_factor_comb = 8'd225;
-			{2'd3, 4'd7}:  decay_factor_comb = 8'd221;
-			{2'd3, 4'd8}:  decay_factor_comb = 8'd216;
-			{2'd3, 4'd9}:  decay_factor_comb = 8'd212;
-			{2'd3, 4'd10}: decay_factor_comb = 8'd208;
-			{2'd3, 4'd11}: decay_factor_comb = 8'd204;
-			{2'd3, 4'd12}: decay_factor_comb = 8'd200;
-			{2'd3, 4'd13}: decay_factor_comb = 8'd196;
-			{2'd3, 4'd14}: decay_factor_comb = 8'd192;
-			{2'd3, 4'd15}: decay_factor_comb = 8'd188;
-			// Off mode is selected in the following stage.
-			default: decay_factor_comb = 8'd255;
+			{2'd3, 4'd0}:  decay_factor = 8'd255;
+			{2'd3, 4'd1}:  decay_factor = 8'd250;
+			{2'd3, 4'd2}:  decay_factor = 8'd245;
+			{2'd3, 4'd3}:  decay_factor = 8'd240;
+			{2'd3, 4'd4}:  decay_factor = 8'd235;
+			{2'd3, 4'd5}:  decay_factor = 8'd230;
+			{2'd3, 4'd6}:  decay_factor = 8'd225;
+			{2'd3, 4'd7}:  decay_factor = 8'd221;
+			{2'd3, 4'd8}:  decay_factor = 8'd216;
+			{2'd3, 4'd9}:  decay_factor = 8'd212;
+			{2'd3, 4'd10}: decay_factor = 8'd208;
+			{2'd3, 4'd11}: decay_factor = 8'd204;
+			{2'd3, 4'd12}: decay_factor = 8'd200;
+			{2'd3, 4'd13}: decay_factor = 8'd196;
+			{2'd3, 4'd14}: decay_factor = 8'd192;
+			{2'd3, 4'd15}: decay_factor = 8'd188;
+			default: decay_factor = 8'd255;
 		endcase
-	end
+	endfunction
 
-	// Register the decay factor with the decoded pixel.
-	logic [7:0] decay_factor_r;
-	logic [6:0] pixel_int_r;
-	logic [5:0] pixel_color_r;
-	logic [1:0] phosphor_mode_r;
-	logic       display_composed_r;
+	function automatic logic [8:0] mapped_decay_scale(
+		input logic [1:0]  mode,
+		input logic [2:0]  reference_idx,
+		input logic [2:0]  stored_idx,
+		input logic [31:0] age_map,
+		input logic        composed
+	);
+		logic [2:0] age_idx;
+		logic [3:0] age;
+		begin
+			age_idx = reference_idx - stored_idx;
+			age = age_map[{age_idx, 2'b00} +: 4];
+			mapped_decay_scale = (composed || (mode == 2'd0))
+				? 9'd256 : {1'b0, decay_factor(mode, age)};
+		end
+	endfunction
+
+	// Precompute every stored phase so pixels only select a registered scale.
+	logic [8:0] decay_scale_map_q [0:7];
 	always_ff @(posedge clk_sys) begin
-		if (ce_pix) begin
-			decay_factor_r <= decay_factor_comb;
-			pixel_int_r    <= pixel_int_comb;
-			pixel_color_r  <= pixel_color_comb;
-			phosphor_mode_r <= phosphor_mode_control_q;
-			display_composed_r <= display_is_composed;
+		for (int stored_idx = 0; stored_idx < 8; stored_idx++) begin
+			decay_scale_map_q[stored_idx] <= mapped_decay_scale(
+				phosphor_mode_control_q, draw_idx, stored_idx[2:0],
+				phosphor_age_map, display_is_composed);
 		end
 	end
 
-	// Apply decay or pass the intensity unchanged.
-	wire [14:0] decayed_full = pixel_int_r * decay_factor_r;
-	wire [6:0]  decayed_int  = decayed_full[14:8];
+	wire [2:0] pixel_draw_idx = vfb_raw_draw_idx(raw_pixel);
+	logic [8:0] decay_scale_r;
+	logic [6:0] pixel_int_r;
+	logic [5:0] pixel_color_r;
+	always_ff @(posedge clk_sys) begin
+		if (ce_pix) begin
+			decay_scale_r <= decay_scale_map_q[pixel_draw_idx];
+			pixel_int_r    <= pixel_int_comb;
+			pixel_color_r  <= pixel_color_comb;
+		end
+	end
 
-	// Off mode keeps the original intensity.
-	wire [6:0] final_int_comb =
-		(display_composed_r || (phosphor_mode_r == 2'd0))
-			? pixel_int_r : decayed_int;
+	// Retain the full 7x9-bit product before dividing by 256.
+	wire [15:0] scaled_int_full = pixel_int_r * decay_scale_r;
 
 	// Register the canonical post-decay sample.
 	logic [6:0] final_int;
 	logic [5:0] pixel_color;
 	always_ff @(posedge clk_sys) begin
 		if (ce_pix) begin
-			final_int <= final_int_comb;
+			final_int <= scaled_int_full[14:8];
 			pixel_color <= pixel_color_r;
 		end
 	end
 
-	wire [12:0] canonical_in = ((pixel_color == 6'd0) || (final_int == 7'd0)) ?
-		13'd0 : {pixel_color, final_int};
+	wire [12:0] canonical_in = {pixel_color, final_int};
 	wire [12:0] canonical_rgb;
 	wire [7:0] color_r;
 	wire [7:0] color_g;
