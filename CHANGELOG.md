@@ -2,6 +2,16 @@
 
 All notable user-facing changes to this project are documented here.
 
+## Update [20260908]
+
+- Promoted Eliminator to release, including both two-player sets, the
+  two-player cocktail version, and the four-player standard and prototype
+  versions.
+- Added persistent high-score saving for Eliminator, Star Trek, Tac/Scan and
+  Zektor. Saved scores load automatically when launching a game through its
+  MRA. Save scores manually through **Save Settings**, or enable
+  **Autosave Hiscores** to save changes when you open the menu.
+
 ## Update [20260823]
 
 - Added Zektor (revision B), including spinner controls, speech, AY audio, and

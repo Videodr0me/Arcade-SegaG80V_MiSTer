@@ -31,10 +31,22 @@ module emu
 	wire   [21:0] gamma_bus;
 
 	logic         ioctl_download;
+	logic         ioctl_upload;
+	logic         ioctl_upload_req;
 	logic         ioctl_wr;
+	logic         ioctl_rd;
 	logic  [26:0] ioctl_addr;
 	logic   [7:0] ioctl_dout;
+	logic   [7:0] ioctl_din;
 	logic  [15:0] ioctl_index;
+	wire   [15:0] hs_address;
+	wire    [7:0] hs_data_in;
+	wire    [7:0] hs_data_out;
+	wire          hs_write;
+	wire          hs_access_read;
+	wire          hs_access_write;
+	wire          hs_pause;
+	wire          hs_configured;
 
 	logic clk_master;   // 15.46848 MHz Sega machine master
 	logic clk_125;
@@ -185,6 +197,8 @@ module emu
 		"P2-,Best left at default:;",
 		"P2O[15:14],Aspect Ratio,Optimized,Stretched,Pixel Perfect;",
 		"-;",
+		"HFOR,Autosave Hiscores,Off,On;",
+		"-;",
 		"P3,Pause Options;",
 		"P3-;",
 		"P3O[116],Pause when OSD is open,Off,On;",
@@ -216,7 +230,7 @@ module emu
 		// bits 4..11: fire1..fire4, start1, start2, coin, pause
 		"J1,Fire,Fire 2,Fire 3,Fire 4,Start 1,Start 2,Coin,Pause;",
 		"jn,A,B,X,Y,Start,Select,R,L;",
-		"V,v1.0.", `BUILD_DATE
+		"V,v1.1.", `BUILD_DATE
 	};
 
 	hps_io #(.CONF_STR(CONF_STR)) hps_io_inst (
@@ -238,7 +252,7 @@ module emu
 		.gamma_bus(gamma_bus),
 		.status(status),
 		.status_menumask({
-			1'b0, cfg_open_matte, spinner_game,
+			~hs_configured, cfg_open_matte, spinner_game,
 			profile_custom_2, profile_custom_1, profile_stranger,
 			profile_neon, profile_overdriven, profile_typical,
 			profile_touch, profile_off,
@@ -246,9 +260,14 @@ module emu
 			video_is_15khz, direct_video, !video_supports_120hz
 		}),
 		.ioctl_download(ioctl_download),
+		.ioctl_upload(ioctl_upload),
+		.ioctl_upload_req(ioctl_upload_req),
+		.ioctl_upload_index(8'd4),
 		.ioctl_wr(ioctl_wr),
+		.ioctl_rd(ioctl_rd),
 		.ioctl_addr(ioctl_addr),
 		.ioctl_dout(ioctl_dout),
+		.ioctl_din(ioctl_din),
 		.ioctl_index(ioctl_index)
 	);
 
@@ -272,6 +291,8 @@ module emu
 	// MRA payload
 	//   index 0   : packed game and sound ROM image; layout in segag80v.sv
 	//   index 1   : one game-identifier byte
+	//   index 3   : high-score RAM ranges and initialization guards
+	//   index 4   : saved high-score data
 	//   index 254 : DIP switches
 	//============================================================
 	logic [7:0] dip_switch [0:7];
@@ -398,17 +419,46 @@ module emu
 	logic [23:0] paused_rgb;
 	wire  [7:0] raw_video_r, raw_video_g, raw_video_b;
 
-	pause #(8, 8, 8, 12) pause_inst (
+	pause #(.CLK_HZ(15_468_480)) pause_inst (
 		.clk_sys(clk_master),
 		.reset(reset_master),
 		.user_button(joystick_0[11] | joystick_1[11] |
 		             joystick_2[11] | joystick_3[11]),
-		.pause_request(1'b0),
+		.pause_request(hs_pause),
 		.options({~status[117], status[116]}),
 		.OSD_STATUS(OSD_STATUS),
 		.r(raw_video_r), .g(raw_video_g), .b(raw_video_b),
 		.pause_cpu(pause_cpu),
 		.rgb_out(paused_rgb)
+	);
+
+	hiscore #(
+		.HS_ADDRESSWIDTH(16),
+		.HS_SCOREWIDTH(8),
+		.CFG_ADDRESSWIDTH(2),
+		.CFG_LENGTHWIDTH(1)
+	) hiscore_inst (
+		.clk(clk_master),
+		.paused(pause_cpu),
+		.reset(reset_master),
+		.autosave(status[27]),
+		.ioctl_upload(ioctl_upload),
+		.ioctl_upload_req(ioctl_upload_req),
+		.ioctl_download(ioctl_download),
+		.ioctl_wr(ioctl_wr),
+		.ioctl_addr(ioctl_addr[24:0]),
+		.ioctl_index(ioctl_index[7:0]),
+		.OSD_STATUS(OSD_STATUS),
+		.data_from_hps(ioctl_dout),
+		.data_from_ram(hs_data_out),
+		.ram_address(hs_address),
+		.data_to_hps(ioctl_din),
+		.data_to_ram(hs_data_in),
+		.ram_write(hs_write),
+		.ram_intent_read(hs_access_read),
+		.ram_intent_write(hs_access_write),
+		.pause_cpu(hs_pause),
+		.configured(hs_configured)
 	);
 
 	wire signed [15:0] machine_audio;
@@ -427,6 +477,12 @@ module emu
 		.rom_wr(ioctl_wr && rom_download),
 		.rom_addr(ioctl_addr[16:0]),
 		.rom_data(ioctl_dout),
+		.hs_address(hs_address),
+		.hs_data_in(hs_data_in),
+		.hs_data_out(hs_data_out),
+		.hs_write(hs_write),
+		.hs_access_read(hs_access_read),
+		.hs_access_write(hs_access_write),
 		.in_d7d6(in_d7d6), .in_d5d4(in_d5d4),
 		.in_d3d2(in_d3d2), .in_d1d0(in_d1d0),
 		.in_fc(in_fc), .in_coins(in_coins),

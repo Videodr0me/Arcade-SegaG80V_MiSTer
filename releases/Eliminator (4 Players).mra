@@ -40,6 +40,16 @@
         <part>01</part>
     </rom>
 
+    <!-- index 3: high-score RAM ranges and initialization guards -->
+    <rom index="3" md5="none">
+        <part>
+            00 00 00 00 00 FF 00 02 00 02 00 01 00 FF 02 00
+            00 00 CC 4D 1E 0C 03 00
+            00 00 C9 28 14 00 00 00
+        </part>
+    </rom>
+    <nvram index="4" size="50"/>
+
     <!-- Two physical DIP banks plus virtual momentary controls. -->
     <switches default="45,00,00">
         <dip bits="2,3" values="1,2,3" ids="3,4,5" name="Lives"/>

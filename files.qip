@@ -19,6 +19,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/sega_reset_sync.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sega_security.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sega_spinner_input.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sega_ports.sv
+set_global_assignment -name VERILOG_FILE rtl/hiscore.v
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/segag80v_cpu.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sega_machine_timing.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/xy/sega_xy.sv
@@ -49,7 +50,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/sega_geometry.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/sega_video.sv
 set_global_assignment -name VERILOG_FILE rtl/pause.v
 
-# --- videodr0me_fb vector renderer (vendored, see Research/) -----------------
+# --- videodr0me_fb vector renderer -------------------------------------------
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_layout_pkg.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_sega_color.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/videodr0me_fb/vfb_rasterizer.sv

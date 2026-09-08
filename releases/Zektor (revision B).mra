@@ -52,6 +52,16 @@
         <part>03</part>
     </rom>
 
+    <!-- index 3: high-score RAM ranges and initialization guards -->
+    <rom index="3" md5="none">
+        <part>
+            00 00 00 00 00 FF 00 02 00 02 00 01 00 FF 02 00
+            00 00 C9 24 39 90 10 00
+            00 00 CF D2 0F 0C 02 00
+        </part>
+    </rom>
+    <nvram index="4" size="72"/>
+
     <!-- Two physical DIP banks plus a virtual self-test switch. -->
     <switches default="8D,33,00">
         <dip bits="0" ids="Cocktail,Upright" name="Cabinet"/>

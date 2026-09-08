@@ -34,7 +34,7 @@ module pause #(
 	parameter						RW=8,						// Width of red channel
 	parameter						GW=8,						// Width of green channel
 	parameter						BW=8,						// Width of blue channel
-	parameter						CLKSPD = 12				// Main clock speed in MHz
+	parameter						CLK_HZ = 12_000_000		// Main clock frequency
 )
 (
 	input								clk_sys,					// Core system clock (should match HPS module)
@@ -53,24 +53,24 @@ module pause #(
 `ifdef PAUSE_OUTPUT_DIM
 	output							dim_video,				// Dim video requested (active-high)
 `endif
-	output [(RW+GW+BW-1):0]		rgb_out					// RGB output to arcade_video module
+	output [(RW+GW+BW-1):0]		rgb_out					// RGB output
 
 );
 
 // Option constants
 localparam 		pause_in_osd	= 1'b0;
 localparam 		dim_video_timer= 1'b1;
+localparam [31:0] DIM_TIMEOUT = CLK_HZ * 10;			// Ten seconds
 
 reg				pause_toggle	= 1'b0;					// User paused (active-high)
 reg [31:0]		pause_timer		= 1'b0;					// Time since pause
-reg [31:0]		dim_timeout		= (CLKSPD*10000000);	// Time until video output dim (10 seconds @ CLKSPD Mhz)
 reg				user_button_last = 1'b0;
 `ifndef PAUSE_OUTPUT_DIM
 wire 			dim_video;				 				// Dim video requested (active-high)
 `endif
 
 assign pause_cpu = (pause_request | pause_toggle  | (OSD_STATUS & options[pause_in_osd])) & !reset;
-assign dim_video = (pause_timer >= dim_timeout);
+assign dim_video = (pause_timer >= DIM_TIMEOUT);
 
 always @(posedge clk_sys) begin
 
@@ -84,7 +84,7 @@ always @(posedge clk_sys) begin
 	if(pause_cpu & options[dim_video_timer])
 	begin
 		// Track pause duration for video dim
-		if((pause_timer<dim_timeout))
+		if(pause_timer < DIM_TIMEOUT)
 		begin
 			pause_timer <= pause_timer + 1'b1;
 		end

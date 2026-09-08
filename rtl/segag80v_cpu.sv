@@ -5,8 +5,6 @@
 //  the memory and I/O maps, the LS253 input matrix, the coin/service/EDGINT
 //  interrupt chain, and the 315-00xx address scrambler.
 //
-//  Reference: refs/mame/segag80v.cpp and CPU_Board_800-0107_sheet{6,7}of7.png.
-//
 //  This program is free software under the GNU General Public License v3.
 //============================================================================
 
@@ -22,6 +20,7 @@ module segag80v_cpu #(
 	input  wire        clk,
 	input  wire        ce_cpu,      // 3.867 MHz enable
 	input  wire        reset,
+	input  wire        pause,
 
 	// ---- MRA configuration ----
 	input  wire  [2:0] cfg_chip,    // security chip, see sega_security_pkg
@@ -31,6 +30,14 @@ module segag80v_cpu #(
 	// ---- program ROM, $0000-$BFFF ----
 	output wire [15:0] rom_addr,
 	input  wire  [7:0] rom_data,
+
+	// ---- high-score access to work RAM ----
+	input  wire [15:0] hs_address,
+	input  wire  [7:0] hs_data_in,
+	output wire  [7:0] hs_data_out,
+	input  wire        hs_write,
+	input  wire        hs_access_read,
+	input  wire        hs_access_write,
 
 	// ---- vector RAM, $E000-$EFFF (to sega_xy_top) ----
 	output wire [11:0] vram_addr,
@@ -74,10 +81,6 @@ module segag80v_cpu #(
 	output wire  [7:0] io_dout,
 
 	output logic [1:0] coin_counter,
-	output wire        dbg_wram_wr,
-	output wire [15:0] dbg_wram_addr_raw,
-	output wire [15:0] dbg_wram_addr_scr,
-	output wire  [7:0] dbg_wram_data,
 	output wire        dbg_io_rd,
 	output wire  [7:0] dbg_port,
 	output wire        dbg_irq,
@@ -207,11 +210,18 @@ module segag80v_cpu #(
 	// ------------------------------------------------------------------
 	(* ramstyle = "M10K" *) logic [7:0] wram [0:2047];
 	logic [7:0] wram_q;
+	wire hs_ram_access = hs_access_read | hs_access_write;
+	wire [10:0] wram_rd_addr = hs_ram_access ? hs_address[10:0] : cpu_a[10:0];
+	wire [10:0] wram_wr_addr = hs_ram_access ? hs_address[10:0] : wr_addr_s[10:0];
+	wire  [7:0] wram_wr_data = hs_ram_access ? hs_data_in : cpu_do;
+	wire        wram_wr = hs_ram_access ? hs_write : !pause && sel_wram && mem_wr;
 
 	always_ff @(posedge clk) begin
-		if (sel_wram && mem_wr) wram[wr_addr_s[10:0]] <= cpu_do;
-		wram_q <= wram[cpu_a[10:0]];
+		if (wram_wr) wram[wram_wr_addr] <= wram_wr_data;
+		wram_q <= wram[wram_rd_addr];
 	end
+
+	assign hs_data_out = wram_q;
 
 	assign vram_addr = wr_addr_s[11:0];
 	assign vram_din  = cpu_do;
@@ -229,8 +239,7 @@ module segag80v_cpu #(
 	logic [7:0] sel_latch;   // $F8 write: spinner select / elim4 demux select
 
 	// DRAW (P1.13) and the coin/service switches are wired into the source
-	// bytes here rather than by the caller. Bit positions follow the D7D6 and
-	// D5D4 port definitions in refs/mame/segag80v.cpp:
+	// bytes here rather than by the caller:
 	//   D7D6: bit 0 = COIN1, bit 4 = COIN2, bit 5 = DRAW
 	//   D5D4: bit 0 = SERVICE
 	// All the switch inputs are active low and idle high.
@@ -421,10 +430,6 @@ module segag80v_cpu #(
 	end
 
 	assign int_n = ~irq_line;
-	assign dbg_wram_wr       = sel_wram & mem_wr;
-	assign dbg_wram_addr_raw = cpu_a;
-	assign dbg_wram_addr_scr = wr_addr_s;
-	assign dbg_wram_data     = cpu_do;
 	assign dbg_io_rd   = io_rd;
 	assign dbg_port    = port;
 	assign dbg_irq     = irq_line;
