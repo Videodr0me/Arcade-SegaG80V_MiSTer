@@ -134,14 +134,14 @@ ROMs are not included.
 
 Copy the release RBF to `_Arcade/cores/` and these MRA files to `_Arcade/`:
 
-- `Eliminator (2 Players, set 1).mra`
 - `Eliminator (2 Players, set 2).mra`
-- `Eliminator (2 Players, cocktail).mra`
-- `Eliminator (4 Players).mra`
-- `Eliminator (4 Players, prototype).mra`
 - `Star Trek.mra`
 - `Tac-Scan.mra`
 - `Zektor (revision B).mra`
+
+Eliminator (2 Players, set 2) is the main entry. For the other four versions,
+copy the MRAs from `releases/_alternatives/_Eliminator/` to
+`_Arcade/_alternatives/_Eliminator/`.
 
 Launch a game through its MRA so MiSTer can assemble and download the required
 ROM image.
@@ -275,11 +275,11 @@ The release supports these MAME ROM sets:
 
 | Game | MRA | ROM archives searched |
 |---|---|---|
-| **Eliminator (2 Players, set 1)** | `releases/Eliminator (2 Players, set 1).mra` | `elim2.zip` |
-| **Eliminator (2 Players, set 2)** | `releases/Eliminator (2 Players, set 2).mra` | `elim2a.zip`, `elim2.zip` |
-| **Eliminator (2 Players, cocktail)** | `releases/Eliminator (2 Players, cocktail).mra` | `elim2c.zip`, `elim2.zip` |
-| **Eliminator (4 Players)** | `releases/Eliminator (4 Players).mra` | `elim4.zip`, `elim2.zip` |
-| **Eliminator (4 Players, prototype)** | `releases/Eliminator (4 Players, prototype).mra` | `elim4p.zip`, `elim2.zip` |
+| **Eliminator (2 Players, set 2)** (main) | `releases/Eliminator (2 Players, set 2).mra` | `elim2a.zip`, `elim2.zip` |
+| **Eliminator (2 Players, set 1)** | `releases/_alternatives/_Eliminator/Eliminator (2 Players, set 1).mra` | `elim2.zip` |
+| **Eliminator (2 Players, cocktail)** | `releases/_alternatives/_Eliminator/Eliminator (2 Players, cocktail).mra` | `elim2c.zip`, `elim2.zip` |
+| **Eliminator (4 Players)** | `releases/_alternatives/_Eliminator/Eliminator (4 Players).mra` | `elim4.zip`, `elim2.zip` |
+| **Eliminator (4 Players, prototype)** | `releases/_alternatives/_Eliminator/Eliminator (4 Players, prototype).mra` | `elim4p.zip`, `elim2.zip` |
 | **Star Trek** | `releases/Star Trek.mra` | `startrek.zip` |
 | **Tac/Scan** | `releases/Tac-Scan.mra` | `tacscan.zip` |
 | **Zektor** | `releases/Zektor (revision B).mra` | `zektor.zip` |
