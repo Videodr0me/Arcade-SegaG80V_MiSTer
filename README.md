@@ -1,10 +1,16 @@
-# Star Trek, Tac/Scan, and Zektor for MiSTer FPGA
+# Eliminator, Star Trek, Tac/Scan, and Zektor for MiSTer FPGA
 
 An FPGA implementation of Sega's G80 color-vector arcade hardware for the
 [MiSTer FPGA](https://github.com/MiSTer-devel/Main_MiSTer/wiki) platform. The
-current release includes **Star Trek: Strategic Operations Simulator**,
-**Tac/Scan**, and **Zektor**, three distinctive 1982 space games built on the
-same hardware.
+current release includes **Eliminator**, **Star Trek: Strategic Operations
+Simulator**, **Tac/Scan**, and **Zektor**.
+
+Eliminator mixes precision flying with a mischievous streak. Take on the
+computer alone, duel a friend, or join a four-player battle. Use energy bolts
+to shove enemy ships into the deadly Eliminator base, then thread a shot
+through its narrow tunnel to end the round. Michael Blanchet praised it as
+offering ["the best two-player action I've seen in a long time"](https://en.wikipedia.org/wiki/Eliminator_%281981_video_game%29#Reception)
+in *How to Beat the Video Games* (1982).
 
 Star Trek puts the Enterprise under direct command. Read the tactical scanner,
 fight through the forward view, fire phasers and photon torpedoes, engage
@@ -38,16 +44,29 @@ Zektor's discrete-audio implementation from its original schematics.
 | Subsystem | Original Hardware | FPGA Implementation |
 |---|---|---|
 | **Main CPU** | Z80 at 3.867120 MHz from the 15.46848 MHz master clock | Cycle-based Z80-compatible G80 machine core with Sega address-security support |
-| **Security** | Sega 315-0064 in Star Trek, 315-0076 in Tac/Scan, and 315-0082 in Zektor | Game-selected address permutation matching each security device |
+| **Security** | Sega 315-0070 in two-player Eliminator, 315-0076 in four-player Eliminator and Tac/Scan, 315-0064 in Star Trek, and 315-0082 in Zektor | Game-selected address permutation matching each security device |
 | **Vector Generator** | Sega X-Y Timing board, vector RAM, sine/cosine PROM, DACs, and analog deflection | Native G80 vector sequencer with a doubled-density shadow DDA and high-resolution raster presentation |
 | **Color** | Six-bit `RRGGBB` resistor-DAC output, with two bits per electron gun and 64 possible colors | All six native color bits are retained through drawing, crossings, phosphor decay, and presentation |
-| **Audio** | Universal Sound Board in Star Trek and Tac/Scan; Star Trek and Zektor use 8035-controlled SP0250 speech, while Zektor adds a discrete sound board and AY-3-8912 | Universal Sound Board and speech models plus schematic-derived Zektor discrete audio and AY sound, with calibrated filtering and mixing |
-| **Display** | Horizontal color X-Y monitor in Star Trek and Zektor; vertical color X-Y monitor in Tac/Scan | 1080p, 720p, 480p, 480i, and 240p output with rotation, bloom, halo, and phosphor behavior |
-| **Controls** | Rotary control and action buttons | Spinner, mouse, analog stick, or digital rotation with adjustable direction and sensitivity |
+| **Audio** | Discrete sound board in Eliminator; Universal Sound Board in Star Trek and Tac/Scan; Star Trek and Zektor use 8035-controlled SP0250 speech, while Zektor adds a discrete sound board and AY-3-8912 | Universal Sound Board, speech, and discrete sound models plus Zektor AY audio, with calibrated filtering and mixing |
+| **Display** | Horizontal color X-Y monitor in Eliminator, Star Trek and Zektor; vertical color X-Y monitor in Tac/Scan | 1080p, 720p, 480p, 480i, and 240p output with rotation, bloom, halo, and phosphor behavior |
+| **Controls** | Left/Right buttons in Eliminator; rotary controls in Star Trek, Tac/Scan and Zektor; action buttons | Independent controls for up to four players; spinner, mouse, analog stick, or digital rotation with adjustable direction and sensitivity for games with rotary controls |
 
 ---
 
 ## Controls
+
+### Eliminator
+
+| Input | Function |
+|---|---|
+| **Left / Right** | Rotate your ship |
+| **Fire (Button A)** | Fire |
+| **Thrust (Button B)** | Apply thrust |
+| **Coin** | Insert a credit |
+
+Each player uses their own controller. The two-player sets and cocktail
+version use **Start 1 / Start 2**. The four-player versions have a separate
+Coin input for each player and no Start buttons.
 
 ### Star Trek
 
@@ -89,6 +108,9 @@ menu.
 
 ### Input Controls Menu
 
+These options apply to Star Trek, Tac/Scan and Zektor. Eliminator uses each
+player's Left/Right buttons directly.
+
 | Option | Function |
 |---|---|
 | **Direction** | Selects normal or reversed rotation. |
@@ -112,12 +134,29 @@ ROMs are not included.
 
 Copy the release RBF to `_Arcade/cores/` and these MRA files to `_Arcade/`:
 
+- `Eliminator (2 Players, set 1).mra`
+- `Eliminator (2 Players, set 2).mra`
+- `Eliminator (2 Players, cocktail).mra`
+- `Eliminator (4 Players).mra`
+- `Eliminator (4 Players, prototype).mra`
 - `Star Trek.mra`
 - `Tac-Scan.mra`
 - `Zektor (revision B).mra`
 
 Launch a game through its MRA so MiSTer can assemble and download the required
 ROM image.
+
+## High Scores
+
+The supplied MRAs support persistent high scores. Saved high scores are
+restored automatically after each game initializes.
+
+To save manually, open the OSD and select **Save Settings**. For automatic
+saving, set **Autosave Hiscores** to **On** and select **Save Settings**. This
+saves the current high scores and preserves the Autosave selection across core
+reloads. Changed high scores will then be saved whenever the OSD is opened.
+
+MiSTer stores them in `/media/fat/config/nvram/` as `<MRA filename>.nvm`.
 
 ## Recommended MiSTer Video Settings
 
@@ -147,7 +186,7 @@ shmask_mode_default=0
 
 #### CRT Output
 
-> **Required for CRT output:** Before loading the core, add all three entries
+> **Required for CRT output:** Before loading the core, add all entries
 > below to the `[SegaG80V]` section of `MiSTer.ini`. They select a
 > CRT-compatible timing and disable MiSTer's VGA scaler and scandoubler.
 >
@@ -159,6 +198,9 @@ For a 15 kHz CRT:
 ```ini
 [SegaG80V]
 video_mode=720,240,60
+vsync_adjust=0
+video_mode_ntsc=
+video_mode_pal=
 vga_scaler=0
 forced_scandoubler=0
 ```
@@ -231,14 +273,18 @@ settings and every fixed-profile value are listed in the
 
 The release supports these MAME ROM sets:
 
-| Game | MRA | ROM archive |
+| Game | MRA | ROM archives searched |
 |---|---|---|
+| **Eliminator (2 Players, set 1)** | `releases/Eliminator (2 Players, set 1).mra` | `elim2.zip` |
+| **Eliminator (2 Players, set 2)** | `releases/Eliminator (2 Players, set 2).mra` | `elim2a.zip`, `elim2.zip` |
+| **Eliminator (2 Players, cocktail)** | `releases/Eliminator (2 Players, cocktail).mra` | `elim2c.zip`, `elim2.zip` |
+| **Eliminator (4 Players)** | `releases/Eliminator (4 Players).mra` | `elim4.zip`, `elim2.zip` |
+| **Eliminator (4 Players, prototype)** | `releases/Eliminator (4 Players, prototype).mra` | `elim4p.zip`, `elim2.zip` |
 | **Star Trek** | `releases/Star Trek.mra` | `startrek.zip` |
 | **Tac/Scan** | `releases/Tac-Scan.mra` | `tacscan.zip` |
 | **Zektor** | `releases/Zektor (revision B).mra` | `zektor.zip` |
 
-Eliminator and Space Fury remain development targets and are not part of this
-release.
+Space Fury remains a development target and is not part of this release.
 
 ## Compilation
 

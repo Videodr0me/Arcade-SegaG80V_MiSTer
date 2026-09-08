@@ -36,6 +36,12 @@ module segag80v #(
 	input  wire        rom_wr,
 	input  wire [16:0] rom_addr,
 	input  wire  [7:0] rom_data,
+	input  wire [15:0] hs_address,
+	input  wire  [7:0] hs_data_in,
+	output wire  [7:0] hs_data_out,
+	input  wire        hs_write,
+	input  wire        hs_access_read,
+	input  wire        hs_access_write,
 
 	// ---- controls ----
 	input  wire  [7:0] in_d7d6,
@@ -129,7 +135,7 @@ module segag80v #(
 	// ------------------------------------------------------------------
 	// Program ROM, $0000-$BFFF (48K) in block RAM
 	// ------------------------------------------------------------------
-	// ROM image layout, shared with sim/tools/build_rom.py and make_mra.py:
+	// ROM image layout:
 	//   $00000  48K program
 	//   $0C000   1K sin/cos PROM
 	//   $0C400   2K speech board 8035 program
@@ -166,11 +172,18 @@ module segag80v #(
 		.clk        (clk_master),
 		.ce_cpu     (ce_cpu),
 		.reset      (reset),
+		.pause      (pause),
 		.cfg_chip   (cfg_chip),
 		.cfg_usb    (cfg_usb),
 		.cfg_fc     (cfg_fc),
 		.rom_addr   (cpu_rom_addr),
 		.rom_data   (cpu_rom_data),
+		.hs_address     (hs_address),
+		.hs_data_in     (hs_data_in),
+		.hs_data_out    (hs_data_out),
+		.hs_write       (hs_write),
+		.hs_access_read (hs_access_read),
+		.hs_access_write(hs_access_write),
 		.vram_addr  (vram_addr),
 		.vram_din   (vram_din),
 		.vram_wr    (vram_wr),
@@ -204,10 +217,6 @@ module segag80v #(
 		.usb_status     (usb_status),
 		.io_dout    (),
 		.coin_counter (coin_counter),
-		.dbg_wram_wr      (),
-		.dbg_wram_addr_raw(),
-		.dbg_wram_addr_scr(),
-		.dbg_wram_data    (),
 		.dbg_io_rd        (),
 		.dbg_port         (),
 		.dbg_irq(dbg_irq), .dbg_coin_ff(dbg_coin_ff), .dbg_int_ack(dbg_int_ack),

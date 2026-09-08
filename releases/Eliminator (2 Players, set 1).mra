@@ -1,32 +1,31 @@
 <misterromdescription>
     <about author="alanswx and Videodr0me" webpage="https://github.com/MiSTer-devel/Arcade-SegaG80V_MiSTer"/>
-    <name>Eliminator (2 Players, set 2)</name>
-    <setname>elim2a</setname>
+    <name>Eliminator (2 Players, set 1)</name>
+    <setname>elim2</setname>
 	<rbf>SegaG80V</rbf>
     <mameversion>0283</mameversion>
     <year>1981</year>
     <manufacturer>Gremlin</manufacturer>
     <category>Shooter</category>
-    <parent>elim2</parent>
     <players>2</players>
     <joystick>2-way horizontal</joystick>
     <num_buttons>2</num_buttons>
     <!-- index 0: 48K program ROM at $0000, sin/cos PROM at $C000 -->
-    <rom index="0" zip="elim2a.zip|elim2.zip" md5="none">
+    <rom index="0" zip="elim2.zip" md5="none">
         <part name="969.cpu-u25" crc="411207f2"/>
-        <part name="1158.prom-u1" crc="a40ac3a5"/>
-        <part name="1159.prom-u2" crc="ff100604"/>
-        <part name="1160a.prom-u3" crc="ebfe33bd"/>
-        <part name="1161a.prom-u4" crc="03d41db3"/>
-        <part name="1162a.prom-u5" crc="f2c7ece3"/>
-        <part name="1163a.prom-u6" crc="1fc58b00"/>
-        <part name="1164a.prom-u7" crc="f37480d1"/>
-        <part name="1165a.prom-u8" crc="328819f8"/>
-        <part name="1166a.prom-u9" crc="1b8e8380"/>
-        <part name="1167a.prom-u10" crc="16aa3156"/>
-        <part name="1168a.prom-u11" crc="3c7c893a"/>
-        <part name="1169a.prom-u12" crc="5cee23b1"/>
-        <part name="1170a.prom-u13" crc="8cdacd35"/>
+        <part name="1333.prom-u1" crc="fd2a2916"/>
+        <part name="1334.prom-u2" crc="79eb5548"/>
+        <part name="1335.prom-u3" crc="3944972e"/>
+        <part name="1336.prom-u4" crc="852f7b4d"/>
+        <part name="1337.prom-u5" crc="cf932b08"/>
+        <part name="1338.prom-u6" crc="99a3f3c9"/>
+        <part name="1339.prom-u7" crc="d35f0fa3"/>
+        <part name="1340.prom-u8" crc="8fd4da21"/>
+        <part name="1341.prom-u9" crc="629c9a28"/>
+        <part name="1342.prom-u10" crc="643df651"/>
+        <part name="1343.prom-u11" crc="d29d70d2"/>
+        <part name="1344.prom-u12" crc="c5e153a3"/>
+        <part name="1345.prom-u13" crc="40597a92"/>
         <part repeat="20480">00</part>
         <!-- $C000: sin/cos PROM, X-Y Timing board U39 -->
         <part name="s-c.xyt-u39" crc="56484d19"/>
@@ -38,6 +37,16 @@
     <rom index="1">
         <part>00</part>
     </rom>
+
+    <!-- index 3: high-score RAM ranges and initialization guards -->
+    <rom index="3" md5="none">
+        <part>
+            00 00 00 00 00 FF 00 02 00 02 00 01 00 FF 02 00
+            00 00 C9 24 14 00 00 00
+            00 00 C9 9F 1E 0C 03 00
+        </part>
+    </rom>
+    <nvram index="4" size="50"/>
 
     <!-- Two physical DIP banks plus a virtual self-test switch. -->
     <switches default="45,33,00">
